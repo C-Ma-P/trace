@@ -89,16 +89,16 @@ func (c *Controller) EnsureLauncherWindow() *application.WebviewWindow {
 	}
 
 	launcherWindow := c.app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Name:      "launcher",
-		Title:     "Trace",
-		Width:     1280,
-		Height:    800,
-		MinWidth:  900,
-		MinHeight: 600,
+		Name:             "launcher",
+		Title:            "Trace",
+		Width:            1280,
+		Height:           800,
+		MinWidth:         900,
+		MinHeight:        600,
 		BackgroundColour: traceWindowBackground,
-		Hidden:    true,
-		URL:       "/?mode=launcher",
-		Linux:     application.LinuxWindow{Menu: c.buildLauncherMenu()},
+		Hidden:           true,
+		URL:              c.withStartupStatus("/?mode=launcher"),
+		Linux:            application.LinuxWindow{Menu: c.buildLauncherMenu()},
 	})
 	c.showWindowOnRuntimeReady(launcherWindow, true, nil)
 
@@ -168,16 +168,16 @@ func (c *Controller) OpenPreferencesWindow(projectID string) *application.Webvie
 
 	// Create new preferences window with a fresh menu.
 	preferencesWindow := c.app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Name:      "preferences",
-		Title:     "Trace Preferences",
-		Width:     1040,
-		Height:    760,
-		MinWidth:  920,
-		MinHeight: 600,
+		Name:             "preferences",
+		Title:            "Trace Preferences",
+		Width:            1040,
+		Height:           760,
+		MinWidth:         920,
+		MinHeight:        600,
 		BackgroundColour: traceWindowBackground,
-		Hidden:    true,
-		URL:       preferencesURL,
-		Linux:     application.LinuxWindow{Menu: c.buildPreferencesMenu(projectID)},
+		Hidden:           true,
+		URL:              c.withStartupStatus(preferencesURL),
+		Linux:            application.LinuxWindow{Menu: c.buildPreferencesMenu(projectID)},
 	})
 	c.showWindowOnRuntimeReady(preferencesWindow, true, nil)
 
@@ -283,7 +283,7 @@ func (c *Controller) OpenProjectWindow(projectID string, hideLauncher bool) erro
 		return nil
 	}
 
-	projectURL := "/?mode=project&projectId=" + url.QueryEscape(projectID)
+	projectURL := c.withStartupStatus("/?mode=project&projectId=" + url.QueryEscape(projectID))
 
 	title := "Trace"
 	for _, rp := range c.backend.ListRecentProjects() {
@@ -294,16 +294,16 @@ func (c *Controller) OpenProjectWindow(projectID string, hideLauncher bool) erro
 	}
 
 	projectWindow := c.app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Name:      name,
-		Title:     title,
-		Width:     1280,
-		Height:    800,
-		MinWidth:  900,
-		MinHeight: 600,
+		Name:             name,
+		Title:            title,
+		Width:            1280,
+		Height:           800,
+		MinWidth:         900,
+		MinHeight:        600,
 		BackgroundColour: traceWindowBackground,
-		Hidden:    true,
-		URL:       projectURL,
-		Linux:     application.LinuxWindow{Menu: c.buildProjectMenu(projectID)},
+		Hidden:           true,
+		URL:              projectURL,
+		Linux:            application.LinuxWindow{Menu: c.buildProjectMenu(projectID)},
 	})
 	c.showWindowOnRuntimeReady(projectWindow, true, func() {
 		if hideLauncher {
@@ -485,6 +485,28 @@ func ensureSubmenu(menu *application.Menu, label string) *application.Menu {
 		}
 	}
 	return menu.AddSubmenu(label)
+}
+
+func (c *Controller) withStartupStatus(rawURL string) string {
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+
+	query := parsedURL.Query()
+	query.Set("startup", c.startupStatusValue())
+	parsedURL.RawQuery = query.Encode()
+	return parsedURL.String()
+}
+
+func (c *Controller) startupStatusValue() string {
+	if c.backend == nil {
+		return "unknown"
+	}
+	if c.backend.GetStartupStatus().Ready {
+		return "ready"
+	}
+	return "failed"
 }
 
 func (c *Controller) preferencesURL(projectID string) string {

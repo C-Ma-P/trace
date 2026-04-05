@@ -38,8 +38,9 @@ export function createLauncherWorkspaceStore() {
   async function init() {
     loading.set(true);
     try {
-      recent.set(await listRecentProjects());
-      openProjectIDs.set(await listOpenProjectIDs());
+	  const [recentProjects, openIDs] = await Promise.all([listRecentProjects(), listOpenProjectIDs()]);
+	  recent.set(recentProjects);
+	  openProjectIDs.set(openIDs);
     } finally {
       loading.set(false);
     }

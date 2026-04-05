@@ -2,7 +2,9 @@ import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { fileURLToPath } from 'url';
 
-export default defineConfig({
+const usePolling = process.platform === 'linux';
+
+export default defineConfig(({ command }) => ({
   plugins: [svelte()],
   resolve: {
     alias: {
@@ -14,4 +16,13 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['svelte-splitpanes'],
   },
-});
+  server: command === 'serve'
+    ? {
+        watch: {
+          usePolling,
+          interval: usePolling ? 120 : undefined,
+          ignored: ['**/dist/**', '**/build/**', '**/bin/**'],
+        },
+      }
+    : undefined,
+}));

@@ -12,12 +12,9 @@ export function createProjectsWorkspaceStore() {
   const loading = writable(false);
   const error = writable('');
 
-  async function init(requestedProjectId: string | null) {
+  async function init() {
     try {
       categories.set(await getCategories());
-      if (requestedProjectId) {
-        await loadProject(requestedProjectId);
-      }
     } catch (e: any) {
       error.set(e?.message ?? String(e));
     }

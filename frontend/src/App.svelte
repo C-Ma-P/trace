@@ -1,19 +1,33 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onMount } from 'svelte';
   import Sidebar from './lib/Sidebar.svelte';
   import ComponentsWorkspace from './lib/components/ComponentsWorkspace.svelte';
   import LauncherWorkspace from './lib/launcher/LauncherWorkspace.svelte';
   import PreferencesWorkspace from './lib/preferences/PreferencesWorkspace.svelte';
   import ProjectsWorkspace from './lib/projects/ProjectsWorkspace.svelte';
+  import { notifyAppReady } from './lib/appReady';
   import { getStartupStatus } from './lib/backend';
   import { openProjectWindow, openProjectWindowKeepLauncher } from './lib/windowService';
 
   type WindowMode = 'launcher' | 'project' | 'preferences';
+  type StartupState = 'ready' | 'failed' | 'unknown';
+
   const params = new URLSearchParams(window.location.search);
   const mode = (params.get('mode') as WindowMode) || 'launcher';
   const initialProjectId = params.get('projectId');
 
+  function parseStartupState(value: string | null): StartupState {
+    if (value === 'ready' || value === 'failed') {
+      return value;
+    }
+    return 'unknown';
+  }
+
+  const startup = parseStartupState(params.get('startup'));
+
   let currentSection: 'home' | 'components' = $state(mode === 'project' ? 'home' : 'components');
+  // Always start as false so the workspace gate is in place until onMount runs.
+  // onMount sets this true either directly (from URL param) or after the RPC.
   let startupChecked = $state(false);
   let startupError = $state('');
   let startupErrorTitle = $state('');
@@ -26,7 +40,7 @@
     });
   }
 
-  onMount(async () => {
+  async function hydrateStartupStatus() {
     try {
       const status = await Promise.race([getStartupStatus(), timeout(10000)]);
       if (status.ready) {
@@ -42,21 +56,38 @@
     } catch (err) {
       startupError = err instanceof Error ? err.message : String(err);
       startupErrorTitle = 'Backend Unavailable';
-      startupErrorBody = 'Trace could not reach the backend runtime. The app cannot be used until this is resolved.';
+      startupErrorBody =
+        'Trace could not reach the backend runtime. The app cannot be used until this is resolved.';
     } finally {
       startupChecked = true;
     }
+  }
+
+  onMount(() => {
+    if (startup === 'ready') {
+      // Backend already confirmed ready via URL param — skip the RPC.
+      startupChecked = true;
+      return;
+    }
+    if (startup === 'failed') {
+      startupError = 'Database initialization failed before the window opened.';
+      startupErrorTitle = 'Database Unavailable';
+      startupErrorBody =
+        'Trace could not initialize the database. The app cannot be used until this is resolved.';
+      startupChecked = true;
+      return;
+    }
+    void hydrateStartupStatus();
   });
 
+  // Dismiss the boot shell once the workspace or error screen has rendered.
+  // notifyAppReady() uses tick() + double-rAF so the content is painted first.
   $effect(() => {
     if (!startupChecked || appReadyNotified) {
       return;
     }
-
     appReadyNotified = true;
-    void tick().then(() => {
-      window.dispatchEvent(new Event('trace:app-ready'));
-    });
+    void notifyAppReady();
   });
 </script>
 

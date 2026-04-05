@@ -30,9 +30,8 @@
     }
   });
 
-
   onMount(async () => {
-    await init(requestedProjectId);
+    await init();
   });
 
   async function handleUpdated() {

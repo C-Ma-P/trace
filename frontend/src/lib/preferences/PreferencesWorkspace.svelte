@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import IntegrationsOverviewPage from './IntegrationsOverviewPage.svelte';
   import { getProject, getProjectDiskPath, type Project } from '../backend';
   import KiCadIntegrationsPage from './KiCadIntegrationsPage.svelte';
   import PreferencesShell from './PreferencesShell.svelte';
@@ -12,6 +13,7 @@
     | 'global-supplier-digikey'
     | 'global-supplier-mouser'
     | 'global-supplier-lcsc'
+    | 'global-integrations'
     | 'global-integration-kicad'
     | 'project-general'
     | 'project-sourcing';
@@ -119,8 +121,10 @@
           },
           {
             id: 'global-integrations',
+            key: 'global-integrations',
             label: 'Integrations',
             hint: 'External tool paths and import defaults',
+            defaultExpanded: true,
             children: [
               {
                 id: 'global-integration-kicad',
@@ -159,6 +163,13 @@
 
   const selectedMeta = $derived.by(() => {
     switch (selectedPage) {
+      case 'global-integrations':
+        return {
+          title: 'Integrations',
+          description: 'Global external tool paths, importer defaults, and integration readiness.',
+          scope: 'Global',
+          path: ['Global', 'Integrations'],
+        };
       case 'global-supplier-digikey':
         return {
           title: 'DigiKey',
@@ -226,6 +237,8 @@
 >
   {#if selectedPage === 'global-suppliers' || selectedPage === 'global-supplier-digikey' || selectedPage === 'global-supplier-mouser' || selectedPage === 'global-supplier-lcsc'}
     <SuppliersSettingsPage section={selectedMeta.supplierSection ?? 'overview'} />
+  {:else if selectedPage === 'global-integrations'}
+    <IntegrationsOverviewPage />
   {:else if selectedPage === 'global-integration-kicad'}
     <KiCadIntegrationsPage />
   {:else if selectedPage === 'project-general'}

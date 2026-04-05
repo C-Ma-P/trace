@@ -19,11 +19,19 @@ export function createComponentsWorkspaceStore() {
   const error = writable('');
 
   async function init() {
+  loading.set(true);
+  error.set('');
     try {
-      categories.set(await getCategories());
-      await loadComponents();
+    const [loadedCategories, loadedComponents] = await Promise.all([
+    getCategories(),
+    listComponents(get(filter)),
+    ]);
+    categories.set(loadedCategories);
+    components.set(loadedComponents);
     } catch (e: any) {
       error.set(e?.message ?? String(e));
+  } finally {
+    loading.set(false);
     }
   }
 

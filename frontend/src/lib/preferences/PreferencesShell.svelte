@@ -7,6 +7,7 @@
     | 'global-supplier-digikey'
     | 'global-supplier-mouser'
     | 'global-supplier-lcsc'
+    | 'global-integrations'
     | 'global-integration-kicad'
     | 'project-general'
     | 'project-sourcing';

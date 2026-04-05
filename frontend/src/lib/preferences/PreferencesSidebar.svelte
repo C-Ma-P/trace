@@ -4,6 +4,7 @@
     | 'global-supplier-digikey'
     | 'global-supplier-mouser'
     | 'global-supplier-lcsc'
+    | 'global-integrations'
     | 'global-integration-kicad'
     | 'project-general'
     | 'project-sourcing';
@@ -79,7 +80,7 @@
                     aria-expanded={isExpanded(node)}
                     onclick={() => toggleNode(node.id)}
                   >
-                    <span class:expanded={isExpanded(node)}>▸</span>
+                    <span class:expanded={isExpanded(node)} class="tree-caret"></span>
                   </button>
                 {:else}
                   <span class="tree-toggle-spacer"></span>
@@ -91,6 +92,7 @@
                     class:selected={selectedPage === node.key}
                     class="tree-item"
                     onclick={() => (selectedPage = node.key!)}
+                    ondblclick={() => node.children?.length && toggleNode(node.id)}
                   >
                     <span class="tree-item-label">{node.label}</span>
                     {#if node.hint}
@@ -101,7 +103,9 @@
                   <button
                     type="button"
                     class="tree-item tree-item-group"
+                    class:child-selected={hasSelectedDescendant(node)}
                     onclick={() => toggleNode(node.id)}
+                    ondblclick={() => toggleNode(node.id)}
                   >
                     <span class="tree-item-label">{node.label}</span>
                     {#if node.hint}
@@ -195,29 +199,47 @@
   .tree-row {
     --depth: 0;
     display: grid;
-    grid-template-columns: 14px minmax(0, 1fr);
+    grid-template-columns: 18px minmax(0, 1fr);
     gap: 6px;
     align-items: start;
-    padding-left: calc(var(--depth) * 14px);
+    padding-left: calc(var(--depth) * 18px);
   }
 
   .tree-toggle,
   .tree-toggle-spacer {
-    width: 14px;
-    min-width: 14px;
+    width: 18px;
+    min-width: 18px;
     height: 28px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     color: var(--color-text-muted);
-    font-size: 10px;
+    font-size: 12px;
   }
 
-  .tree-toggle span {
-    transition: transform 0.14s ease;
+  .tree-toggle {
+    appearance: none;
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    transition: color 0.12s ease;
   }
 
-  .tree-toggle span.expanded {
+  .tree-toggle:hover {
+    color: var(--color-text-primary);
+  }
+
+  .tree-caret {
+    width: 0;
+    height: 0;
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    border-left: 6px solid currentColor;
+    transition: transform 0.12s ease;
+  }
+
+  .tree-caret.expanded {
     transform: rotate(90deg);
   }
 
@@ -247,6 +269,11 @@
   }
 
   .tree-item-group {
+    color: var(--color-text-secondary);
+  }
+
+  .tree-item-group.child-selected {
+    border-left-color: var(--color-accent);
     color: var(--color-text-primary);
   }
 

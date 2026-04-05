@@ -20,6 +20,6 @@ const app = mount(App, {
 });
 
 window.addEventListener('trace:app-ready', dismissBootShell, { once: true });
-window.setTimeout(dismissBootShell, 1800);
+window.setTimeout(dismissBootShell, 5000);
 
 export default app;

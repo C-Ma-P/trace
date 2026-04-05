@@ -56,8 +56,8 @@
     }
   });
 
-  onMount(() => {
-    void init();
+  onMount(async () => {
+    await init();
   });
 
   onMount(() => {
