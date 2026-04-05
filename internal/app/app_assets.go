@@ -1,0 +1,196 @@
+package app
+
+import (
+	"context"
+	"encoding/json"
+	"time"
+
+	"componentmanager/internal/assetsearch"
+	"componentmanager/internal/domain"
+)
+
+func (a *App) CreateComponentAsset(req CreateComponentAssetInput) (ComponentAssetResponse, error) {
+	if err := a.checkReady(); err != nil {
+		return ComponentAssetResponse{}, err
+	}
+	var metaJSON json.RawMessage
+	if req.MetadataJSON != nil {
+		metaJSON = json.RawMessage(*req.MetadataJSON)
+	}
+	asset, err := a.svc.CreateComponentAsset(context.Background(), domain.ComponentAsset{
+		ComponentID:  req.ComponentID,
+		AssetType:    domain.AssetType(req.AssetType),
+		Source:       req.Source,
+		Status:       domain.AssetStatus(req.Status),
+		Label:        req.Label,
+		URLOrPath:    req.URLOrPath,
+		PreviewURL:   req.PreviewURL,
+		MetadataJSON: metaJSON,
+	})
+	if err != nil {
+		return ComponentAssetResponse{}, err
+	}
+	return assetToResponse(asset), nil
+}
+
+func (a *App) ListComponentAssets(componentID string) ([]ComponentAssetResponse, error) {
+	if err := a.checkReady(); err != nil {
+		return nil, err
+	}
+	assets, err := a.svc.ListComponentAssets(context.Background(), componentID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ComponentAssetResponse, len(assets))
+	for i, asset := range assets {
+		out[i] = assetToResponse(asset)
+	}
+	return out, nil
+}
+
+func (a *App) SelectComponentAsset(componentID, assetType, assetID string) error {
+	if err := a.checkReady(); err != nil {
+		return err
+	}
+	return a.svc.SetSelectedComponentAsset(context.Background(), componentID, domain.AssetType(assetType), assetID)
+}
+
+func (a *App) ClearSelectedComponentAsset(componentID, assetType string) error {
+	if err := a.checkReady(); err != nil {
+		return err
+	}
+	return a.svc.ClearSelectedComponentAsset(context.Background(), componentID, domain.AssetType(assetType))
+}
+
+func (a *App) GetComponentDetail(componentID string) (ComponentDetailResponse, error) {
+	if err := a.checkReady(); err != nil {
+		return ComponentDetailResponse{}, err
+	}
+	detail, err := a.svc.GetComponentWithAssets(context.Background(), componentID)
+	if err != nil {
+		return ComponentDetailResponse{}, err
+	}
+	return componentDetailToResponse(detail), nil
+}
+
+func assetToResponse(a domain.ComponentAsset) ComponentAssetResponse {
+	var meta *string
+	if a.MetadataJSON != nil {
+		s := string(a.MetadataJSON)
+		meta = &s
+	}
+	return ComponentAssetResponse{
+		ID:           a.ID,
+		ComponentID:  a.ComponentID,
+		AssetType:    string(a.AssetType),
+		Source:       a.Source,
+		Status:       string(a.Status),
+		Label:        a.Label,
+		URLOrPath:    a.URLOrPath,
+		PreviewURL:   a.PreviewURL,
+		MetadataJSON: meta,
+		CreatedAt:    a.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:    a.UpdatedAt.Format(time.RFC3339),
+	}
+}
+
+func assetPtrToResponse(a *domain.ComponentAsset) *ComponentAssetResponse {
+	if a == nil {
+		return nil
+	}
+	r := assetToResponse(*a)
+	return &r
+}
+
+func componentDetailToResponse(d domain.ComponentWithAssets) ComponentDetailResponse {
+	assets := make([]ComponentAssetResponse, len(d.Assets))
+	for i, a := range d.Assets {
+		assets[i] = assetToResponse(a)
+	}
+	return ComponentDetailResponse{
+		Component:              componentToResponse(d.Component),
+		SelectedSymbolAsset:    assetPtrToResponse(d.SelectedSymbolAsset),
+		SelectedFootprintAsset: assetPtrToResponse(d.SelectedFootprintAsset),
+		Selected3DModelAsset:   assetPtrToResponse(d.Selected3DModelAsset),
+		SelectedDatasheetAsset: assetPtrToResponse(d.SelectedDatasheetAsset),
+		Assets:                 assets,
+	}
+}
+
+func (a *App) SearchComponentAssets(componentID string, query string) (AssetSearchResponse, error) {
+	if err := a.checkReady(); err != nil {
+		return AssetSearchResponse{}, err
+	}
+	resp, err := a.assetSearch.SearchForComponent(context.Background(), assetsearch.SearchRequest{
+		ComponentID: componentID,
+		Query:       query,
+	})
+	if err != nil {
+		return AssetSearchResponse{}, err
+	}
+	return searchResponseToApp(resp), nil
+}
+
+func (a *App) ImportComponentAssetResult(componentID string, provider string, externalID string) (AssetImportResponse, error) {
+	if err := a.checkReady(); err != nil {
+		return AssetImportResponse{}, err
+	}
+	resp, err := a.assetSearch.ImportSearchResult(context.Background(), assetsearch.ImportRequest{
+		ComponentID: componentID,
+		Provider:    provider,
+		ExternalID:  externalID,
+	})
+	if err != nil {
+		return AssetImportResponse{}, err
+	}
+	return importResponseToApp(resp), nil
+}
+
+func searchResponseToApp(r assetsearch.SearchResponse) AssetSearchResponse {
+	results := make([]AssetSearchProviderResult, len(r.ProviderResults))
+	for i, pr := range r.ProviderResults {
+		candidates := make([]AssetSearchCandidate, len(pr.Candidates))
+		for j, c := range pr.Candidates {
+			candidates[j] = AssetSearchCandidate{
+				ExternalID:   c.ExternalID,
+				Title:        c.Title,
+				Manufacturer: c.Manufacturer,
+				MPN:          c.MPN,
+				Package:      c.Package,
+				Description:  c.Description,
+				HasSymbol:    c.HasSymbol,
+				HasFootprint: c.HasFootprint,
+				Has3DModel:   c.Has3DModel,
+				HasDatasheet: c.HasDatasheet,
+				PreviewURL:   c.PreviewURL,
+				SourceURL:    c.SourceURL,
+				Metadata:     c.Metadata,
+			}
+		}
+		results[i] = AssetSearchProviderResult{
+			Provider:   pr.Provider,
+			Candidates: candidates,
+			Error:      pr.Error,
+		}
+	}
+	return AssetSearchResponse{ProviderResults: results}
+}
+
+func importResponseToApp(r assetsearch.ImportResponse) AssetImportResponse {
+	assets := make([]AssetImportedAsset, len(r.ImportedAssets))
+	for i, a := range r.ImportedAssets {
+		assets[i] = AssetImportedAsset{
+			AssetType: a.AssetType,
+			Label:     a.Label,
+			URLOrPath: a.URLOrPath,
+		}
+	}
+	warnings := r.Warnings
+	if warnings == nil {
+		warnings = []string{}
+	}
+	return AssetImportResponse{
+		ImportedAssets: assets,
+		Warnings:       warnings,
+	}
+}

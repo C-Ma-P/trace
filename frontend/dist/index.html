@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0f1117" />
+    <title>Trace</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --boot-bg: #0f1117;
+        --boot-surface: #141720;
+        --boot-border: #2a2e3e;
+        --boot-muted: #5c6070;
+        --boot-accent: rgba(59, 130, 246, 0.12);
+      }
+
+      html, body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: var(--boot-bg);
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        color: #e2e5f0;
+      }
+
+      #app {
+        height: 100%;
+      }
+
+      #boot-shell {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: stretch;
+        justify-content: stretch;
+        background:
+          linear-gradient(180deg, rgba(59, 130, 246, 0.05), transparent 200px),
+          var(--boot-bg);
+        pointer-events: none;
+        z-index: 2147483647;
+        opacity: 1;
+        transition: opacity 120ms ease-out;
+      }
+
+      #boot-shell.boot-shell-hidden {
+        opacity: 0;
+      }
+
+      .boot-sidebar {
+        width: 360px;
+        flex: 0 0 auto;
+        border-right: 1px solid var(--boot-border);
+        background: var(--boot-surface);
+      }
+
+      .boot-main {
+        flex: 1 1 auto;
+      }
+
+      .boot-sidebar::before {
+        content: '';
+        display: block;
+        height: 54px;
+        border-bottom: 1px solid var(--boot-border);
+        background: linear-gradient(90deg, var(--boot-accent), transparent 60%);
+      }
+
+      .boot-sidebar::after {
+        content: '';
+        display: block;
+        margin: 14px 12px;
+        height: 12px;
+        border-radius: 999px;
+        background: var(--boot-border);
+        box-shadow:
+          0 28px 0 var(--boot-border),
+          0 56px 0 var(--boot-border),
+          0 84px 0 rgba(42, 46, 62, 0.7),
+          0 112px 0 rgba(42, 46, 62, 0.55);
+      }
+
+      @media (max-width: 900px) {
+        .boot-sidebar {
+          width: 240px;
+        }
+      }
+    </style>
+    <script type="module" crossorigin src="/assets/index-M3oQdJ9b.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-B9vFmKWc.css">
+  </head>
+  <body>
+    <div id="boot-shell" aria-hidden="true">
+      <div class="boot-sidebar"></div>
+      <div class="boot-main"></div>
+    </div>
+    <div id="app"></div>
+  </body>
+</html>

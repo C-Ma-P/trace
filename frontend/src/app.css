@@ -1,0 +1,278 @@
+/* ================================================================
+   Design Tokens
+   ================================================================
+   Semantic token system with theme support via [data-theme].
+   Dark theme is the default. All components consume these tokens.
+   ================================================================ */
+
+:root {
+  color-scheme: dark;
+
+  /* --- Radii --- */
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+
+  /* --- Typography --- */
+  --font-mono: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+}
+
+:root[data-theme='dark'] {
+  /* --- Backgrounds --- */
+  --color-bg-app:               #0f1117;
+  --color-bg-surface:           #1a1d27;
+  --color-bg-surface-elevated:  #222637;
+  --color-bg-sidebar:           #141720;
+  --color-bg-sidebar-hover:     #1e2235;
+  --color-bg-sidebar-active:    rgba(59, 130, 246, 0.1);
+  --color-bg-input:             #141720;
+  --color-bg-muted:             #1e2130;
+  --color-bg-hover:             #1e2235;
+  --color-bg-selected:          rgba(59, 130, 246, 0.12);
+
+  /* --- Text --- */
+  --color-text-primary:         #e2e5f0;
+  --color-text-secondary:       #8b90a0;
+  --color-text-muted:           #5c6070;
+  --color-text-inverse:         #0f1117;
+  --color-text-on-accent:       #ffffff;
+
+  /* --- Borders --- */
+  --color-border:               #2a2e3e;
+  --color-border-strong:        #3a3f52;
+  --color-border-focus:         #3b82f6;
+
+  /* --- Accent --- */
+  --color-accent:               #3b82f6;
+  --color-accent-hover:         #5b9aff;
+  --color-accent-soft:          rgba(59, 130, 246, 0.12);
+  --color-accent-text:          #7cb3ff;
+
+  /* --- Success --- */
+  --color-success:              #34d399;
+  --color-success-soft:         rgba(52, 211, 153, 0.12);
+  --color-success-text:         #6ee7b7;
+  --color-success-border:       rgba(52, 211, 153, 0.25);
+
+  /* --- Warning --- */
+  --color-warning:              #fbbf24;
+  --color-warning-soft:         rgba(251, 191, 36, 0.12);
+  --color-warning-text:         #fcd34d;
+  --color-warning-border:       rgba(251, 191, 36, 0.25);
+
+  /* --- Danger --- */
+  --color-danger:               #f87171;
+  --color-danger-soft:          rgba(248, 113, 113, 0.12);
+  --color-danger-text:          #fca5a5;
+  --color-danger-border:        rgba(248, 113, 113, 0.25);
+
+  /* --- Info --- */
+  --color-info:                 #60a5fa;
+  --color-info-soft:            rgba(96, 165, 250, 0.12);
+  --color-info-text:            #93c5fd;
+  --color-info-border:          rgba(96, 165, 250, 0.25);
+
+  /* --- Backdrop & Shadows --- */
+  --color-backdrop:             rgba(0, 0, 0, 0.6);
+  --shadow-sm:                  0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md:                  0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg:                  0 6px 24px rgba(0, 0, 0, 0.55);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #app {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  background: var(--color-bg-app);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+input, select, textarea {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+/* --- Utility classes --- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.btn-primary {
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+}
+.btn-primary:hover {
+  background: var(--color-accent-hover);
+}
+
+.btn-secondary {
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+}
+.btn-secondary:hover {
+  background: var(--color-bg-hover);
+}
+
+.btn-danger {
+  background: var(--color-danger);
+  color: var(--color-text-on-accent);
+}
+.btn-danger:hover {
+  background: var(--color-danger-soft);
+  color: var(--color-danger-text);
+}
+
+.btn-ghost {
+  color: var(--color-text-secondary);
+  padding: 4px 8px;
+}
+.btn-ghost:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.btn-sm {
+  padding: 3px 9px;
+  font-size: 12px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.form-group label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.form-input {
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-input);
+  color: var(--color-text-primary);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.form-input:focus {
+  border-color: var(--color-border-focus);
+}
+
+.form-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+select.form-input {
+  cursor: pointer;
+}
+
+textarea.form-input {
+  resize: vertical;
+  min-height: 60px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 2px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--color-bg-muted);
+  color: var(--color-text-secondary);
+}
+
+.badge-success {
+  background: var(--color-success-soft);
+  color: var(--color-success-text);
+}
+
+.badge-warning {
+  background: var(--color-warning-soft);
+  color: var(--color-warning-text);
+}
+
+.badge-danger {
+  background: var(--color-danger-soft);
+  color: var(--color-danger-text);
+}
+
+.error-text {
+  color: var(--color-danger);
+  font-size: 12px;
+}
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--color-text-muted);
+  font-size: 14px;
+}
+
+.unit-label {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-left: 4px;
+}
+
+/* ================================================================
+   Splitpanes dark theme
+   ================================================================ */
+
+.splitpanes__splitter {
+  background: var(--color-border) !important;
+  position: relative;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.splitpanes--vertical > .splitpanes__splitter {
+  width: 4px;
+  cursor: col-resize;
+  transition: background 0.15s;
+}
+.splitpanes--horizontal > .splitpanes__splitter {
+  height: 4px;
+  cursor: row-resize;
+  transition: background 0.15s;
+}
+
+.splitpanes__splitter:hover,
+.splitpanes--dragging .splitpanes__splitter {
+  background: var(--color-border-focus) !important;
+}

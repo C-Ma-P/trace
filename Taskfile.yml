@@ -1,0 +1,39 @@
+version: '3'
+
+vars:
+  APP_NAME: trace
+  BIN_DIR: bin
+  VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'
+
+tasks:
+  common:install:frontend:deps:
+    dir: frontend
+    cmds:
+      - npm install
+
+  common:build:frontend:
+    dir: frontend
+    deps:
+      - task: common:install:frontend:deps
+    cmds:
+      - npm run build
+
+  common:dev:frontend:
+    dir: frontend
+    deps:
+      - task: common:install:frontend:deps
+    cmds:
+      - npm run dev -- --port {{.VITE_PORT}} --strictPort
+
+  linux:build:
+    deps:
+      - task: common:build:frontend
+    cmds:
+      - mkdir -p {{.BIN_DIR}}
+      - go build -tags "{{.TAGS}}" -o {{.BIN_DIR}}/{{.APP_NAME}}
+    vars:
+      TAGS: '{{if eq .DEV "true"}}webkit2_41{{else}}production,webkit2_41{{end}}{{if .EXTRA_TAGS}},{{.EXTRA_TAGS}}{{end}}'
+
+  run:
+    cmds:
+      - ./{{.BIN_DIR}}/{{.APP_NAME}}
