@@ -146,7 +146,7 @@ func (c *Controller) OpenPreferencesWindow(projectID string) *application.Webvie
 	if c.preferences != nil && c.preferencesProjectID == projectID {
 		prefs := c.preferences
 		c.mu.Unlock()
-		prefs.SetURL(preferencesURL)
+		prefs.SetURL(c.withStartupStatus(preferencesURL))
 		prefs.Show()
 		prefs.Focus()
 		return prefs

@@ -101,6 +101,7 @@ export interface ProjectPlan {
 export interface SourceRequirementResult {
   offers: SupplierOffer[];
   providers: SupplierProviderStatus[];
+  currency: string;
 }
 
 export interface RequirementPlan {
@@ -109,6 +110,8 @@ export interface RequirementPlan {
   shortfallQuantity: number;
   selectedPart: RequirementSelectedPart | null;
   matches: ComponentMatch[];
+  candidates: PartCandidate[];
+  savedOffers: SavedSupplierOffer[];
 }
 
 export interface RequirementSelectedPart {
@@ -129,7 +132,6 @@ export interface SupplierOffer {
   stock: number | null;
   moq: number | null;
   unitPrice: number | null;
-  currency: string;
   productUrl: string;
   datasheetUrl: string;
   lifecycle: string;
@@ -149,6 +151,43 @@ export interface ComponentMatch {
   component: Component;
   onHandQuantity: number;
   score: number;
+}
+
+export interface PartCandidate {
+  id: string;
+  projectId: string;
+  requirementId: string;
+  componentId: string;
+  preferred: boolean;
+  origin: 'local' | 'imported_from_supplier';
+  component: Component | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SavedSupplierOffer {
+  id: string;
+  projectId: string;
+  requirementId: string;
+  provider: string;
+  providerPartId: string;
+  productUrl: string;
+  manufacturer: string;
+  mpn: string;
+  description: string;
+  package: string;
+  stock: number | null;
+  moq: number | null;
+  unitPrice: number | null;
+  currency: string;
+  linkedComponentId: string | null;
+  capturedAt: string;
+  createdAt: string;
+}
+
+export interface ImportSupplierOfferResult {
+  candidate: PartCandidate;
+  savedOffer: SavedSupplierOffer;
 }
 
 export interface ComponentAsset {
@@ -535,6 +574,70 @@ export function clearSelectedComponentForRequirement(
   requirementId: string
 ): Promise<void> {
   return call('ClearSelectedComponentForRequirement', requirementId);
+}
+
+export function addPartCandidate(
+  requirementId: string,
+  componentId: string
+): Promise<PartCandidate> {
+  return call('AddPartCandidate', requirementId, componentId);
+}
+
+export function setPreferredCandidate(
+  requirementId: string,
+  candidateId: string
+): Promise<void> {
+  return call('SetPreferredCandidate', requirementId, candidateId);
+}
+
+export function setPreferredLocalComponent(
+  requirementId: string,
+  componentId: string
+): Promise<PartCandidate> {
+  return call('SetPreferredLocalComponent', requirementId, componentId);
+}
+
+export function removePartCandidate(candidateId: string): Promise<void> {
+  return call('RemovePartCandidate', candidateId);
+}
+
+export function saveSupplierOffer(input: {
+  requirementId: string;
+  provider: string;
+  providerPartId: string;
+  productUrl: string;
+  manufacturer: string;
+  mpn: string;
+  description: string;
+  package: string;
+  stock: number | null;
+  moq: number | null;
+  unitPrice: number | null;
+  currency: string;
+}): Promise<SavedSupplierOffer> {
+  return call('SaveSupplierOffer', input);
+}
+
+export function importSupplierOffer(input: {
+  requirementId: string;
+  provider: string;
+  providerPartId: string;
+  productUrl: string;
+  manufacturer: string;
+  mpn: string;
+  description: string;
+  package: string;
+  stock: number | null;
+  moq: number | null;
+  unitPrice: number | null;
+  currency: string;
+  setPreferred: boolean;
+}): Promise<ImportSupplierOfferResult> {
+  return call('ImportSupplierOffer', input);
+}
+
+export function removeSavedSupplierOffer(offerId: string): Promise<void> {
+  return call('RemoveSavedSupplierOffer', offerId);
 }
 
 export function getComponentDetail(id: string): Promise<ComponentDetail> {

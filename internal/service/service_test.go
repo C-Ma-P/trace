@@ -149,6 +149,37 @@ func (s *stubProjectRepo) SetRequirementResolution(_ context.Context, reqID stri
 	return nil
 }
 
+func (s *stubProjectRepo) AddPartCandidate(_ context.Context, c domain.ProjectPartCandidate) (domain.ProjectPartCandidate, error) {
+	return c, nil
+}
+func (s *stubProjectRepo) SetPreferredCandidate(_ context.Context, _, _ string) error {
+	return nil
+}
+func (s *stubProjectRepo) RemovePartCandidate(_ context.Context, _ string) error {
+	return nil
+}
+func (s *stubProjectRepo) ListPartCandidates(_ context.Context, _ string) ([]domain.ProjectPartCandidate, error) {
+	return nil, nil
+}
+func (s *stubProjectRepo) ListPartCandidatesByProject(_ context.Context, _ string) ([]domain.ProjectPartCandidate, error) {
+	return nil, nil
+}
+func (s *stubProjectRepo) SaveSupplierOffer(_ context.Context, o domain.SavedSupplierOffer) (domain.SavedSupplierOffer, error) {
+	return o, nil
+}
+func (s *stubProjectRepo) RemoveSavedSupplierOffer(_ context.Context, _ string) error {
+	return nil
+}
+func (s *stubProjectRepo) ListSavedSupplierOffers(_ context.Context, _ string) ([]domain.SavedSupplierOffer, error) {
+	return nil, nil
+}
+func (s *stubProjectRepo) ListSavedSupplierOffersByProject(_ context.Context, _ string) ([]domain.SavedSupplierOffer, error) {
+	return nil, nil
+}
+func (s *stubProjectRepo) LinkSupplierOfferToComponent(_ context.Context, _, _ string) error {
+	return nil
+}
+
 type stubAssetRepo struct {
 	created   *domain.ComponentAsset
 	createErr error

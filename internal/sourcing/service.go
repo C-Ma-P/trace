@@ -35,6 +35,7 @@ type LCSCConfig struct {
 
 type Service struct {
 	providers []Provider
+	currency  string
 }
 
 func NewService(providers ...Provider) *Service {
@@ -42,11 +43,13 @@ func NewService(providers ...Provider) *Service {
 }
 
 func NewFromConfig(config Config) *Service {
-	return NewService(
+	svc := NewService(
 		NewDigiKeyProvider(config.DigiKey),
 		NewMouserProvider(config.Mouser),
 		NewLCSCProvider(config.LCSC),
 	)
+	svc.currency = firstCurrency(config.DigiKey.Currency, config.LCSC.Currency)
+	return svc
 }
 
 func NewFromEnv() *Service {
@@ -101,6 +104,7 @@ func (s *Service) Source(ctx context.Context, query RequirementQuery) SourceResu
 	result := SourceResult{
 		Offers:    make([]SupplierOffer, 0, 16),
 		Providers: make([]ProviderStatus, 0, len(s.providers)),
+		Currency:  s.currency,
 	}
 
 	for _, provider := range s.providers {

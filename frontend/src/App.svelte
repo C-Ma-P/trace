@@ -25,13 +25,21 @@
 
   const startup = parseStartupState(params.get('startup'));
 
+  console.log(`[startup/frontend +${Math.round(performance.now())}ms] App.svelte init mode=${mode} startup=${startup}`);
+
   let currentSection: 'home' | 'components' = $state(mode === 'project' ? 'home' : 'components');
-  // Always start as false so the workspace gate is in place until onMount runs.
-  // onMount sets this true either directly (from URL param) or after the RPC.
-  let startupChecked = $state(false);
-  let startupError = $state('');
-  let startupErrorTitle = $state('');
-  let startupErrorBody = $state('');
+  // For ready/failed, the startup state is known immediately from the URL — no gate needed.
+  // Only startup=unknown requires an async backend check before rendering.
+  let startupChecked = $state(startup !== 'unknown');
+  let startupError = $state(
+    startup === 'failed' ? 'Database initialization failed before the window opened.' : '',
+  );
+  let startupErrorTitle = $state(startup === 'failed' ? 'Database Unavailable' : '');
+  let startupErrorBody = $state(
+    startup === 'failed'
+      ? 'Trace could not initialize the database. The app cannot be used until this is resolved.'
+      : '',
+  );
   let appReadyNotified = $state(false);
 
   function timeout(ms: number): Promise<never> {
@@ -63,21 +71,11 @@
     }
   }
 
+  // Only startup=unknown needs the async backend check; ready/failed are already resolved.
   onMount(() => {
-    if (startup === 'ready') {
-      // Backend already confirmed ready via URL param — skip the RPC.
-      startupChecked = true;
-      return;
+    if (startup === 'unknown') {
+      void hydrateStartupStatus();
     }
-    if (startup === 'failed') {
-      startupError = 'Database initialization failed before the window opened.';
-      startupErrorTitle = 'Database Unavailable';
-      startupErrorBody =
-        'Trace could not initialize the database. The app cannot be used until this is resolved.';
-      startupChecked = true;
-      return;
-    }
-    void hydrateStartupStatus();
   });
 
   // Dismiss the boot shell once the workspace or error screen has rendered.
@@ -87,6 +85,7 @@
       return;
     }
     appReadyNotified = true;
+    console.log(`[startup/frontend +${Math.round(performance.now())}ms] notifying app-ready`);
     void notifyAppReady();
   });
 </script>

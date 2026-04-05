@@ -71,7 +71,7 @@ func (p *DigiKeyProvider) Search(ctx context.Context, query RequirementQuery) ([
 		products := append([]digikey.Product{}, response.ExactMatches...)
 		products = append(products, response.Products...)
 		for _, product := range products {
-			offer := normalizeDigiKeyProduct(product, p.config.Currency)
+			offer := normalizeDigiKeyProduct(product)
 			key := normalizePart(offer.SupplierPartNumber + offer.MPN)
 			if _, ok := seen[key]; ok {
 				continue
@@ -135,7 +135,7 @@ func (p *DigiKeyProvider) FriendlyError(err error) string {
 	return err.Error()
 }
 
-func normalizeDigiKeyProduct(product digikey.Product, configuredCurrency string) SupplierOffer {
+func normalizeDigiKeyProduct(product digikey.Product) SupplierOffer {
 	stock := product.QuantityAvailable
 	minOrder := product.StandardPackage
 	unitPrice := product.UnitPrice
@@ -175,7 +175,6 @@ func normalizeDigiKeyProduct(product digikey.Product, configuredCurrency string)
 		Stock:              intPointer(stock),
 		MOQ:                intPointer(minOrder),
 		UnitPrice:          floatPointer(unitPrice),
-		Currency:           configuredCurrency,
 		ProductURL:         strings.TrimSpace(product.ProductURL),
 		DatasheetURL:       strings.TrimSpace(product.DatasheetURL),
 		Lifecycle:          lifecycle,

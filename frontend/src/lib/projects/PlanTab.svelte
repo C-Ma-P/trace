@@ -2,17 +2,25 @@
   import {
     planProject,
     sourceRequirement,
-    selectComponentForRequirement,
     clearSelectedComponentForRequirement,
+    addPartCandidate,
+    setPreferredCandidate,
+    setPreferredLocalComponent,
+    removePartCandidate,
+    saveSupplierOffer,
+    importSupplierOffer,
+    removeSavedSupplierOffer,
     categoryDisplayName,
     type Project,
     type ProjectPlan,
     type RequirementPlan,
     type RequirementSelectedPart,
     type SourceRequirementResult,
-    type SupplierOffer,
+    type SupplierOffer as SupplierOfferType,
     type SupplierProviderStatus,
     type CategoryInfo,
+    type PartCandidate,
+    type SavedSupplierOffer,
   } from '../backend';
 
   let { project, categories = [], onupdated }: {
@@ -28,6 +36,7 @@
   let supplierResultsByRequirementId = $state<Record<string, SourceRequirementResult | undefined>>({});
   let supplierLoadingByRequirementId = $state<Record<string, boolean>>({});
   let supplierErrorByRequirementId = $state<Record<string, string>>({});
+  let actionInProgress = $state<Record<string, boolean>>({});
 
   $effect(() => {
     if (project) {
@@ -84,11 +93,43 @@
     }
   }
 
-  async function handleSelect(requirementId: string, componentId: string) {
+  async function handleAddCandidate(requirementId: string, componentId: string) {
     error = '';
     try {
-      await selectComponentForRequirement(requirementId, componentId);
+      await addPartCandidate(requirementId, componentId);
+      await runPlan();
+    } catch (e: any) {
+      error = e?.message ?? String(e);
+    }
+  }
+
+  async function handleSetPreferred(requirementId: string, componentId: string) {
+    error = '';
+    try {
+      await setPreferredLocalComponent(requirementId, componentId);
+      await runPlan();
       onupdated?.();
+    } catch (e: any) {
+      error = e?.message ?? String(e);
+    }
+  }
+
+  async function handleSetCandidatePreferred(requirementId: string, candidateId: string) {
+    error = '';
+    try {
+      await setPreferredCandidate(requirementId, candidateId);
+      await runPlan();
+      onupdated?.();
+    } catch (e: any) {
+      error = e?.message ?? String(e);
+    }
+  }
+
+  async function handleRemoveCandidate(candidateId: string) {
+    error = '';
+    try {
+      await removePartCandidate(candidateId);
+      await runPlan();
     } catch (e: any) {
       error = e?.message ?? String(e);
     }
@@ -98,7 +139,76 @@
     error = '';
     try {
       await clearSelectedComponentForRequirement(requirementId);
+      await runPlan();
       onupdated?.();
+    } catch (e: any) {
+      error = e?.message ?? String(e);
+    }
+  }
+
+  async function handleSaveOffer(requirementId: string, offer: SupplierOfferType, currency: string) {
+    const key = `save-${requirementId}-${offer.supplierPartNumber}`;
+    if (actionInProgress[key]) return;
+    actionInProgress = { ...actionInProgress, [key]: true };
+    error = '';
+    try {
+      await saveSupplierOffer({
+        requirementId,
+        provider: offer.provider,
+        providerPartId: offer.supplierPartNumber,
+        productUrl: offer.productUrl,
+        manufacturer: offer.manufacturer,
+        mpn: offer.mpn,
+        description: offer.description,
+        package: offer.package,
+        stock: offer.stock,
+        moq: offer.moq,
+        unitPrice: offer.unitPrice,
+        currency,
+      });
+      await runPlan();
+    } catch (e: any) {
+      error = e?.message ?? String(e);
+    } finally {
+      actionInProgress = { ...actionInProgress, [key]: false };
+    }
+  }
+
+  async function handleImportOffer(requirementId: string, offer: SupplierOfferType, currency: string, setPreferred: boolean) {
+    const key = `import-${requirementId}-${offer.supplierPartNumber}`;
+    if (actionInProgress[key]) return;
+    actionInProgress = { ...actionInProgress, [key]: true };
+    error = '';
+    try {
+      await importSupplierOffer({
+        requirementId,
+        provider: offer.provider,
+        providerPartId: offer.supplierPartNumber,
+        productUrl: offer.productUrl,
+        manufacturer: offer.manufacturer,
+        mpn: offer.mpn,
+        description: offer.description,
+        package: offer.package,
+        stock: offer.stock,
+        moq: offer.moq,
+        unitPrice: offer.unitPrice,
+        currency,
+        setPreferred,
+      });
+      await runPlan();
+      if (setPreferred) onupdated?.();
+    } catch (e: any) {
+      error = e?.message ?? String(e);
+    } finally {
+      actionInProgress = { ...actionInProgress, [key]: false };
+    }
+  }
+
+  async function handleRemoveSavedOffer(offerId: string) {
+    error = '';
+    try {
+      await removeSavedSupplierOffer(offerId);
+      await runPlan();
     } catch (e: any) {
       error = e?.message ?? String(e);
     }
@@ -117,7 +227,7 @@
     return { class: 'badge-success', text: 'On hand matches' };
   }
 
-  function supplierQualityBadge(offer: SupplierOffer): { class: string; text: string } {
+  function supplierQualityBadge(offer: SupplierOfferType): { class: string; text: string } {
     if (offer.matchScore >= 120) {
       return { class: 'badge-success', text: 'Strong' };
     }
@@ -138,10 +248,9 @@
     return value.toLocaleString();
   }
 
-  function formatSupplierPrice(offer: SupplierOffer): string {
+  function formatSupplierPrice(offer: SupplierOfferType | SavedSupplierOffer): string {
     if (offer.unitPrice === null) return '—';
-    const amount = offer.unitPrice < 1 ? offer.unitPrice.toFixed(4) : offer.unitPrice.toFixed(2);
-    return offer.currency ? `${offer.currency} ${amount}` : amount;
+    return offer.unitPrice < 1 ? offer.unitPrice.toFixed(4) : offer.unitPrice.toFixed(2);
   }
 
   function supplierResult(requirementId: string): SourceRequirementResult | null {
@@ -182,6 +291,9 @@
               <span class="plan-name">{rp.requirement.name || 'Unnamed'}</span>
               <span class="badge">{categoryDisplayName(categories, rp.requirement.category)}</span>
               <span class="badge {status.class}">{status.text}</span>
+              {#if rp.candidates.length > 0}
+                <span class="badge">{rp.candidates.length} candidate{rp.candidates.length === 1 ? '' : 's'}</span>
+              {/if}
             </div>
             <div class="plan-header-right">
               <span class="plan-qty">
@@ -194,7 +306,7 @@
           {#if rp.selectedPart}
             <div class="selected-banner">
               <div class="selected-banner-copy">
-                <span class="selected-banner-label">Resolved part definition</span>
+                <span class="selected-banner-label">Preferred part</span>
                 <strong>{resolvedPartLabel(rp.selectedPart)}</strong>
                 <span class="selected-banner-meta">
                   On hand {rp.selectedPart.onHandQuantity} / required {rp.requirement.quantity}
@@ -211,44 +323,65 @@
 
           {#if expandedReq === rp.requirement.id}
             <div class="expanded-sections">
-              <section class="plan-section resolution-section">
-                <div class="subsection-header">
-                  <div>
-                    <h4>Requirement Resolution</h4>
-                    <span class="subsection-note">Chosen part identity stays separate from stock and procurement</span>
+              <!-- Candidates Section -->
+              {#if rp.candidates.length > 0}
+                <section class="plan-section">
+                  <div class="subsection-header">
+                    <h4>Part Candidates</h4>
                   </div>
-                </div>
+                  <table class="match-table">
+                    <thead>
+                      <tr>
+                        <th>MPN</th>
+                        <th>Manufacturer</th>
+                        <th>Package</th>
+                        <th>Origin</th>
+                        <th>Status</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each rp.candidates as candidate}
+                        <tr class:selected-match={candidate.preferred}>
+                          <td class="mpn-cell">{candidate.component?.mpn || '—'}</td>
+                          <td>{candidate.component?.manufacturer || '—'}</td>
+                          <td>{candidate.component?.package || '—'}</td>
+                          <td><span class="origin-badge">{candidate.origin === 'imported_from_supplier' ? 'Imported' : 'Local'}</span></td>
+                          <td>
+                            {#if candidate.preferred}
+                              <span class="badge badge-success">Preferred</span>
+                            {:else}
+                              <span class="badge">Candidate</span>
+                            {/if}
+                          </td>
+                          <td class="action-cell">
+                            {#if !candidate.preferred}
+                              <button
+                                class="btn btn-secondary btn-sm"
+                                onclick={() => handleSetCandidatePreferred(rp.requirement.id, candidate.id)}
+                              >
+                                Set Preferred
+                              </button>
+                            {/if}
+                            <button
+                              class="btn btn-ghost btn-sm"
+                              onclick={() => handleRemoveCandidate(candidate.id)}
+                            >
+                              Remove
+                            </button>
+                          </td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                  </table>
+                </section>
+              {/if}
 
-                {#if rp.selectedPart}
-                  <div class="resolution-card">
-                    <div class="resolution-grid">
-                      <div>
-                        <span class="resolution-label">Selected part</span>
-                        <strong>{resolvedPartLabel(rp.selectedPart)}</strong>
-                      </div>
-                      <div>
-                        <span class="resolution-label">Resolution kind</span>
-                        <strong>{rp.selectedPart.resolution.kind}</strong>
-                      </div>
-                      <div>
-                        <span class="resolution-label">On hand stock</span>
-                        <strong>{rp.selectedPart.onHandQuantity}</strong>
-                      </div>
-                      <div>
-                        <span class="resolution-label">Shortfall</span>
-                        <strong>{rp.selectedPart.shortfallQuantity}</strong>
-                      </div>
-                    </div>
-                  </div>
-                {:else}
-                  <div class="empty-msg">No part definition is resolved for this requirement yet.</div>
-                {/if}
-              </section>
-
+              <!-- Local Matches Section -->
               <section class="plan-section">
                 <div class="subsection-header">
                   <h4>Local Matches</h4>
-                  <span class="subsection-note">Catalog definitions already in Trace with separate on-hand stock counts</span>
+                  <span class="subsection-note">Components in catalog matching this requirement</span>
                 </div>
 
                 {#if rp.matches.length === 0}
@@ -267,24 +400,34 @@
                     </thead>
                     <tbody>
                       {#each rp.matches as match}
-                        <tr
-                          class:selected-match={match.component.id === rp.requirement.selectedComponentId}
-                        >
+                        {@const isCandidate = rp.candidates.some(c => c.componentId === match.component.id)}
+                        {@const isPreferred = rp.candidates.some(c => c.componentId === match.component.id && c.preferred)}
+                        <tr class:selected-match={isPreferred}>
                           <td class="mpn-cell">{match.component.mpn || '—'}</td>
                           <td>{match.component.manufacturer || '—'}</td>
                           <td>{match.component.package || '—'}</td>
                           <td class="qty-cell">{match.onHandQuantity}</td>
                           <td class="score-cell">{match.score}</td>
-                          <td>
-                            {#if match.component.id !== rp.requirement.selectedComponentId}
-                              <button
-                                class="btn btn-secondary btn-sm"
-                                onclick={() => handleSelect(rp.requirement.id, match.component.id)}
-                              >
-                                Select
-                              </button>
+                          <td class="action-cell">
+                            {#if isPreferred}
+                              <span class="badge badge-success">Preferred</span>
                             {:else}
-                              <span class="badge badge-success">Selected</span>
+                              <button
+                                class="btn btn-primary btn-sm"
+                                onclick={() => handleSetPreferred(rp.requirement.id, match.component.id)}
+                              >
+                                Set Preferred
+                              </button>
+                              {#if !isCandidate}
+                                <button
+                                  class="btn btn-secondary btn-sm"
+                                  onclick={() => handleAddCandidate(rp.requirement.id, match.component.id)}
+                                >
+                                  Add Candidate
+                                </button>
+                              {:else}
+                                <span class="badge">Candidate</span>
+                              {/if}
                             {/if}
                           </td>
                         </tr>
@@ -294,29 +437,85 @@
                 {/if}
               </section>
 
+              <!-- Saved Supplier Offers Section -->
+              {#if rp.savedOffers.length > 0}
+                <section class="plan-section">
+                  <div class="subsection-header">
+                    <h4>Saved Supplier Offers</h4>
+                    <span class="subsection-note">Procurement snapshots saved for this requirement</span>
+                  </div>
+                  <table class="match-table supplier-table">
+                    <thead>
+                      <tr>
+                        <th>Provider</th>
+                        <th>MPN</th>
+                        <th>Manufacturer</th>
+                        <th>Package</th>
+                        <th>Stock</th>
+                        <th>MOQ</th>
+                        <th>Price</th>
+                        <th>Imported</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each rp.savedOffers as saved}
+                        <tr>
+                          <td><span class="provider-badge">{saved.provider}</span></td>
+                          <td class="mpn-cell">{saved.mpn || '—'}</td>
+                          <td>{saved.manufacturer || '—'}</td>
+                          <td>{saved.package || '—'}</td>
+                          <td class="qty-cell">{formatSupplierCount(saved.stock)}</td>
+                          <td class="qty-cell">{formatSupplierCount(saved.moq)}</td>
+                          <td>{formatSupplierPrice(saved)}</td>
+                          <td>
+                            {#if saved.linkedComponentId}
+                              <span class="badge badge-success">Yes</span>
+                            {:else}
+                              <span class="muted-cell">No</span>
+                            {/if}
+                          </td>
+                          <td class="action-cell">
+                            {#if saved.productUrl}
+                              <a class="supplier-link" href={saved.productUrl} target="_blank" rel="noreferrer">
+                                View
+                              </a>
+                            {/if}
+                            <button
+                              class="btn btn-ghost btn-sm"
+                              onclick={() => handleRemoveSavedOffer(saved.id)}
+                            >
+                              Remove
+                            </button>
+                          </td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                  </table>
+                </section>
+              {/if}
+
+              <!-- Supplier Options Section -->
               <section class="plan-section supplier-section">
                 <div class="subsection-header">
                   <div>
                     <h4>Supplier Options</h4>
-                    <span class="subsection-note">Procurement-facing offers, kept distinct from the resolved engineering part</span>
+                    <span class="subsection-note">Live distributor search results</span>
                   </div>
                   <div class="supplier-actions">
                     <button
                       class="btn btn-secondary btn-sm"
-                      onclick={() => loadSupplierOptions(rp.requirement.id)}
+                      onclick={() => loadSupplierOptions(rp.requirement.id, !!supplierResult(rp.requirement.id))}
                       disabled={supplierLoadingByRequirementId[rp.requirement.id]}
                     >
-                      {supplierResult(rp.requirement.id) ? 'Reload Supplier Options' : 'Find Supplier Options'}
+                      {#if supplierLoadingByRequirementId[rp.requirement.id]}
+                        Searching…
+                      {:else if supplierResult(rp.requirement.id)}
+                        Refresh Supplier Options
+                      {:else}
+                        Find Supplier Options
+                      {/if}
                     </button>
-                    {#if supplierResult(rp.requirement.id)}
-                      <button
-                        class="btn btn-ghost btn-sm"
-                        onclick={() => loadSupplierOptions(rp.requirement.id, true)}
-                        disabled={supplierLoadingByRequirementId[rp.requirement.id]}
-                      >
-                        Refresh
-                      </button>
-                    {/if}
                   </div>
                 </div>
 
@@ -355,7 +554,7 @@
                           <th>Package</th>
                           <th>Stock</th>
                           <th>MOQ</th>
-                          <th>Unit Price</th>
+                          <th>Unit Price ({sourcingResult.currency || 'USD'})</th>
                           <th>Match</th>
                           <th></th>
                         </tr>
@@ -380,14 +579,25 @@
                                 {/if}
                               </div>
                             </td>
-                            <td>
-                              {#if offer.productUrl}
-                                <a class="supplier-link" href={offer.productUrl} target="_blank" rel="noreferrer">
-                                  View
-                                </a>
-                              {:else}
-                                <span class="muted-cell">—</span>
-                              {/if}
+                            <td class="action-cell">
+                              <button
+                                class="btn btn-primary btn-sm"
+                                onclick={() => handleImportOffer(rp.requirement.id, offer, sourcingResult.currency, true)}
+                              >
+                                Import + Prefer
+                              </button>
+                              <button
+                                class="btn btn-secondary btn-sm"
+                                onclick={() => handleImportOffer(rp.requirement.id, offer, sourcingResult.currency, false)}
+                              >
+                                Import
+                              </button>
+                              <button
+                                class="btn btn-ghost btn-sm"
+                                onclick={() => handleSaveOffer(rp.requirement.id, offer, sourcingResult.currency)}
+                              >
+                                Save Offer
+                              </button>
                             </td>
                           </tr>
                         {/each}
@@ -646,6 +856,22 @@
   }
   .muted-cell {
     color: var(--color-text-muted);
+  }
+  .action-cell {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .origin-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: var(--color-bg-muted);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
   }
   @media (max-width: 980px) {
     .resolution-grid {

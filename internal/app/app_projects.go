@@ -373,12 +373,22 @@ func planToResponse(plan domain.ProjectPlan) ProjectPlanResponse {
 				Score:          m.Score,
 			}
 		}
+		candidates := make([]PartCandidateResponse, len(rp.Candidates))
+		for j, c := range rp.Candidates {
+			candidates[j] = partCandidateToResponse(c)
+		}
+		savedOffers := make([]SavedSupplierOfferResponse, len(rp.SavedOffers))
+		for j, o := range rp.SavedOffers {
+			savedOffers[j] = savedOfferToResponse(o)
+		}
 		reqs[i] = RequirementPlanResponse{
 			Requirement:            requirementToResponse(rp.Requirement),
 			MatchingOnHandQuantity: rp.MatchingOnHandQuantity,
 			ShortfallQuantity:      rp.ShortfallQuantity,
 			SelectedPart:           selectedPartToResponse(rp.SelectedPart),
 			Matches:                matches,
+			Candidates:             candidates,
+			SavedOffers:            savedOffers,
 		}
 	}
 	return ProjectPlanResponse{
@@ -456,7 +466,6 @@ func sourceResultToResponse(result sourcing.SourceResult) SourceRequirementRespo
 			Stock:              offer.Stock,
 			MOQ:                offer.MOQ,
 			UnitPrice:          offer.UnitPrice,
-			Currency:           offer.Currency,
 			ProductURL:         offer.ProductURL,
 			DatasheetURL:       offer.DatasheetURL,
 			Lifecycle:          offer.Lifecycle,
@@ -476,5 +485,146 @@ func sourceResultToResponse(result sourcing.SourceResult) SourceRequirementRespo
 		}
 	}
 
-	return SourceRequirementResponse{Offers: offers, Providers: providers}
+	return SourceRequirementResponse{Offers: offers, Providers: providers, Currency: result.Currency}
+}
+
+// --- Part Candidates ---
+
+func (a *App) AddPartCandidate(requirementID, componentID string) (PartCandidateResponse, error) {
+	if err := a.checkReady(); err != nil {
+		return PartCandidateResponse{}, err
+	}
+	candidate, err := a.svc.AddPartCandidate(context.Background(), requirementID, componentID)
+	if err != nil {
+		return PartCandidateResponse{}, err
+	}
+	return partCandidateToResponse(candidate), nil
+}
+
+func (a *App) SetPreferredCandidate(requirementID, candidateID string) error {
+	if err := a.checkReady(); err != nil {
+		return err
+	}
+	return a.svc.SetPreferredCandidate(context.Background(), requirementID, candidateID)
+}
+
+func (a *App) SetPreferredLocalComponent(requirementID, componentID string) (PartCandidateResponse, error) {
+	if err := a.checkReady(); err != nil {
+		return PartCandidateResponse{}, err
+	}
+	candidate, err := a.svc.AddLocalComponentAsCandidateAndSetPreferred(context.Background(), requirementID, componentID)
+	if err != nil {
+		return PartCandidateResponse{}, err
+	}
+	return partCandidateToResponse(candidate), nil
+}
+
+func (a *App) RemovePartCandidate(candidateID string) error {
+	if err := a.checkReady(); err != nil {
+		return err
+	}
+	return a.svc.RemovePartCandidate(context.Background(), candidateID)
+}
+
+// --- Saved Supplier Offers ---
+
+func (a *App) SaveSupplierOffer(input SaveSupplierOfferInput) (SavedSupplierOfferResponse, error) {
+	if err := a.checkReady(); err != nil {
+		return SavedSupplierOfferResponse{}, err
+	}
+	offer := domain.SavedSupplierOffer{
+		Provider:       input.Provider,
+		ProviderPartID: input.ProviderPartID,
+		ProductURL:     input.ProductURL,
+		Manufacturer:   input.Manufacturer,
+		MPN:            input.MPN,
+		Description:    input.Description,
+		Package:        input.Package,
+		Stock:          input.Stock,
+		MOQ:            input.MOQ,
+		UnitPrice:      input.UnitPrice,
+		Currency:       input.Currency,
+		CapturedAt:     time.Now().UTC(),
+	}
+	saved, err := a.svc.SaveSupplierOfferForRequirement(context.Background(), input.RequirementID, offer)
+	if err != nil {
+		return SavedSupplierOfferResponse{}, err
+	}
+	return savedOfferToResponse(saved), nil
+}
+
+func (a *App) ImportSupplierOffer(input ImportSupplierOfferInput) (ImportSupplierOfferResponse, error) {
+	if err := a.checkReady(); err != nil {
+		return ImportSupplierOfferResponse{}, err
+	}
+	offer := domain.SavedSupplierOffer{
+		Provider:       input.Provider,
+		ProviderPartID: input.ProviderPartID,
+		ProductURL:     input.ProductURL,
+		Manufacturer:   input.Manufacturer,
+		MPN:            input.MPN,
+		Description:    input.Description,
+		Package:        input.Package,
+		Stock:          input.Stock,
+		MOQ:            input.MOQ,
+		UnitPrice:      input.UnitPrice,
+		Currency:       input.Currency,
+		CapturedAt:     time.Now().UTC(),
+	}
+	candidate, savedOffer, err := a.svc.ImportSupplierOffer(context.Background(), input.RequirementID, offer, input.SetPreferred)
+	if err != nil {
+		return ImportSupplierOfferResponse{}, err
+	}
+	return ImportSupplierOfferResponse{
+		Candidate:  partCandidateToResponse(candidate),
+		SavedOffer: savedOfferToResponse(savedOffer),
+	}, nil
+}
+
+func (a *App) RemoveSavedSupplierOffer(offerID string) error {
+	if err := a.checkReady(); err != nil {
+		return err
+	}
+	return a.svc.RemoveSavedSupplierOffer(context.Background(), offerID)
+}
+
+func partCandidateToResponse(c domain.ProjectPartCandidate) PartCandidateResponse {
+	var comp *ComponentResponse
+	if c.Component != nil {
+		cr := componentToResponse(*c.Component)
+		comp = &cr
+	}
+	return PartCandidateResponse{
+		ID:            c.ID,
+		ProjectID:     c.ProjectID,
+		RequirementID: c.RequirementID,
+		ComponentID:   c.ComponentID,
+		Preferred:     c.Preferred,
+		Origin:        string(c.Origin),
+		Component:     comp,
+		CreatedAt:     c.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:     c.UpdatedAt.Format(time.RFC3339),
+	}
+}
+
+func savedOfferToResponse(o domain.SavedSupplierOffer) SavedSupplierOfferResponse {
+	return SavedSupplierOfferResponse{
+		ID:                o.ID,
+		ProjectID:         o.ProjectID,
+		RequirementID:     o.RequirementID,
+		Provider:          o.Provider,
+		ProviderPartID:    o.ProviderPartID,
+		ProductURL:        o.ProductURL,
+		Manufacturer:      o.Manufacturer,
+		MPN:               o.MPN,
+		Description:       o.Description,
+		Package:           o.Package,
+		Stock:             o.Stock,
+		MOQ:               o.MOQ,
+		UnitPrice:         o.UnitPrice,
+		Currency:          o.Currency,
+		LinkedComponentID: o.LinkedComponentID,
+		CapturedAt:        o.CapturedAt.Format(time.RFC3339),
+		CreatedAt:         o.CreatedAt.Format(time.RFC3339),
+	}
 }

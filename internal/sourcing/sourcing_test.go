@@ -99,8 +99,8 @@ func TestNormalizeProviderOffers(t *testing.T) {
 			PackageType:          digikey.PackageType{Name: "Tape & Reel (TR)"},
 			MinimumOrderQuantity: 1,
 		}},
-	}, "USD")
-	if digi.Provider != "DigiKey" || digi.SupplierPartNumber != "296-8480-1-ND" || digi.Currency != "USD" {
+	})
+	if digi.Provider != "DigiKey" || digi.SupplierPartNumber != "296-8480-1-ND" {
 		t.Fatalf("unexpected DigiKey normalization: %#v", digi)
 	}
 

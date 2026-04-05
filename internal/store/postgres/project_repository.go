@@ -422,6 +422,176 @@ func (r *ProjectRepository) DeleteProject(ctx context.Context, id string) error 
 	return nil
 }
 
+// --- Part Candidates ---
+
+func (r *ProjectRepository) AddPartCandidate(ctx context.Context, candidate domain.ProjectPartCandidate) (domain.ProjectPartCandidate, error) {
+	if err := r.store.db.QueryRowxContext(ctx, `
+		insert into project_part_candidates(id, project_id, requirement_id, component_id, preferred, origin)
+		values ($1, $2, $3, $4, $5, $6)
+		returning created_at, updated_at
+	`, candidate.ID, candidate.ProjectID, candidate.RequirementID, candidate.ComponentID, candidate.Preferred, candidate.Origin,
+	).Scan(&candidate.CreatedAt, &candidate.UpdatedAt); err != nil {
+		return domain.ProjectPartCandidate{}, err
+	}
+	return candidate, nil
+}
+
+func (r *ProjectRepository) SetPreferredCandidate(ctx context.Context, requirementID, candidateID string) error {
+	tx, err := r.store.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, `
+		update project_part_candidates
+		set preferred = false, updated_at = now()
+		where requirement_id = $1 and preferred = true
+	`, requirementID); err != nil {
+		return err
+	}
+
+	res, err := tx.ExecContext(ctx, `
+		update project_part_candidates
+		set preferred = true, updated_at = now()
+		where id = $1 and requirement_id = $2
+	`, candidateID, requirementID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return domain.ErrNotFound{ID: candidateID}
+	}
+
+	return tx.Commit()
+}
+
+func (r *ProjectRepository) RemovePartCandidate(ctx context.Context, candidateID string) error {
+	res, err := r.store.db.ExecContext(ctx, `delete from project_part_candidates where id = $1`, candidateID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return domain.ErrNotFound{ID: candidateID}
+	}
+	return nil
+}
+
+func (r *ProjectRepository) ListPartCandidates(ctx context.Context, requirementID string) ([]domain.ProjectPartCandidate, error) {
+	var candidates []domain.ProjectPartCandidate
+	if err := r.store.db.SelectContext(ctx, &candidates, `
+		select id, project_id, requirement_id, component_id, preferred, origin, created_at, updated_at
+		from project_part_candidates
+		where requirement_id = $1
+		order by preferred desc, created_at
+	`, requirementID); err != nil {
+		return nil, err
+	}
+	return candidates, nil
+}
+
+func (r *ProjectRepository) ListPartCandidatesByProject(ctx context.Context, projectID string) ([]domain.ProjectPartCandidate, error) {
+	var candidates []domain.ProjectPartCandidate
+	if err := r.store.db.SelectContext(ctx, &candidates, `
+		select id, project_id, requirement_id, component_id, preferred, origin, created_at, updated_at
+		from project_part_candidates
+		where project_id = $1
+		order by requirement_id, preferred desc, created_at
+	`, projectID); err != nil {
+		return nil, err
+	}
+	return candidates, nil
+}
+
+// --- Saved Supplier Offers ---
+
+func (r *ProjectRepository) SaveSupplierOffer(ctx context.Context, offer domain.SavedSupplierOffer) (domain.SavedSupplierOffer, error) {
+	if err := r.store.db.QueryRowxContext(ctx, `
+		insert into saved_supplier_offers(id, project_id, requirement_id, provider, provider_part_id, product_url,
+			manufacturer, mpn, description, package, stock, moq, unit_price, currency, linked_component_id, captured_at)
+		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+		returning created_at
+	`, offer.ID, offer.ProjectID, offer.RequirementID, offer.Provider, offer.ProviderPartID, offer.ProductURL,
+		offer.Manufacturer, offer.MPN, offer.Description, offer.Package, offer.Stock, offer.MOQ,
+		offer.UnitPrice, offer.Currency, offer.LinkedComponentID, offer.CapturedAt,
+	).Scan(&offer.CreatedAt); err != nil {
+		return domain.SavedSupplierOffer{}, err
+	}
+	return offer, nil
+}
+
+func (r *ProjectRepository) RemoveSavedSupplierOffer(ctx context.Context, offerID string) error {
+	res, err := r.store.db.ExecContext(ctx, `delete from saved_supplier_offers where id = $1`, offerID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return domain.ErrNotFound{ID: offerID}
+	}
+	return nil
+}
+
+func (r *ProjectRepository) ListSavedSupplierOffers(ctx context.Context, requirementID string) ([]domain.SavedSupplierOffer, error) {
+	var offers []domain.SavedSupplierOffer
+	if err := r.store.db.SelectContext(ctx, &offers, `
+		select id, project_id, requirement_id, provider, provider_part_id, product_url,
+			manufacturer, mpn, description, package, stock, moq, unit_price, currency,
+			linked_component_id, captured_at, created_at
+		from saved_supplier_offers
+		where requirement_id = $1
+		order by created_at desc
+	`, requirementID); err != nil {
+		return nil, err
+	}
+	return offers, nil
+}
+
+func (r *ProjectRepository) ListSavedSupplierOffersByProject(ctx context.Context, projectID string) ([]domain.SavedSupplierOffer, error) {
+	var offers []domain.SavedSupplierOffer
+	if err := r.store.db.SelectContext(ctx, &offers, `
+		select id, project_id, requirement_id, provider, provider_part_id, product_url,
+			manufacturer, mpn, description, package, stock, moq, unit_price, currency,
+			linked_component_id, captured_at, created_at
+		from saved_supplier_offers
+		where project_id = $1
+		order by requirement_id, created_at desc
+	`, projectID); err != nil {
+		return nil, err
+	}
+	return offers, nil
+}
+
+func (r *ProjectRepository) LinkSupplierOfferToComponent(ctx context.Context, offerID, componentID string) error {
+	res, err := r.store.db.ExecContext(ctx, `
+		update saved_supplier_offers
+		set linked_component_id = $1
+		where id = $2
+	`, componentID, offerID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return domain.ErrNotFound{ID: offerID}
+	}
+	return nil
+}
+
 func validateConstraint(constraint domain.RequirementConstraint) error {
 	switch constraint.ValueType {
 	case domain.ValueTypeText:

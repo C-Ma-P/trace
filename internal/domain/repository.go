@@ -40,6 +40,20 @@ type ProjectRepository interface {
 	SetProjectImportMetadata(context.Context, string, *string, *string, *time.Time) error
 	GetRequirement(context.Context, string) (ProjectRequirement, error)
 	SetRequirementResolution(context.Context, string, *RequirementResolution) error
+
+	// Part candidates
+	AddPartCandidate(context.Context, ProjectPartCandidate) (ProjectPartCandidate, error)
+	SetPreferredCandidate(ctx context.Context, requirementID, candidateID string) error
+	RemovePartCandidate(context.Context, string) error
+	ListPartCandidates(ctx context.Context, requirementID string) ([]ProjectPartCandidate, error)
+	ListPartCandidatesByProject(ctx context.Context, projectID string) ([]ProjectPartCandidate, error)
+
+	// Saved supplier offers
+	SaveSupplierOffer(context.Context, SavedSupplierOffer) (SavedSupplierOffer, error)
+	RemoveSavedSupplierOffer(context.Context, string) error
+	ListSavedSupplierOffers(ctx context.Context, requirementID string) ([]SavedSupplierOffer, error)
+	ListSavedSupplierOffersByProject(ctx context.Context, projectID string) ([]SavedSupplierOffer, error)
+	LinkSupplierOfferToComponent(ctx context.Context, offerID, componentID string) error
 }
 
 type PreferenceRepository interface {

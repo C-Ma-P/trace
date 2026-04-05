@@ -127,6 +127,8 @@ type RequirementPlan struct {
 	ShortfallQuantity      int
 	SelectedPart           *RequirementSelectedPart
 	Matches                []ComponentMatch
+	Candidates             []ProjectPartCandidate
+	SavedOffers            []SavedSupplierOffer
 }
 
 type ProjectPlan struct {
@@ -140,6 +142,47 @@ type RequirementSelectedPart struct {
 	Component         *Component
 	OnHandQuantity    int
 	ShortfallQuantity int
+}
+
+type CandidateOrigin string
+
+const (
+	CandidateOriginLocal            CandidateOrigin = "local"
+	CandidateOriginImportedSupplier CandidateOrigin = "imported_from_supplier"
+)
+
+type ProjectPartCandidate struct {
+	ID            string          `db:"id"`
+	ProjectID     string          `db:"project_id"`
+	RequirementID string          `db:"requirement_id"`
+	ComponentID   string          `db:"component_id"`
+	Preferred     bool            `db:"preferred"`
+	Origin        CandidateOrigin `db:"origin"`
+	CreatedAt     time.Time       `db:"created_at"`
+	UpdatedAt     time.Time       `db:"updated_at"`
+
+	// Hydrated by service layer, not persisted.
+	Component *Component `db:"-"`
+}
+
+type SavedSupplierOffer struct {
+	ID                string    `db:"id"`
+	ProjectID         string    `db:"project_id"`
+	RequirementID     string    `db:"requirement_id"`
+	Provider          string    `db:"provider"`
+	ProviderPartID    string    `db:"provider_part_id"`
+	ProductURL        string    `db:"product_url"`
+	Manufacturer      string    `db:"manufacturer"`
+	MPN               string    `db:"mpn"`
+	Description       string    `db:"description"`
+	Package           string    `db:"package"`
+	Stock             *int      `db:"stock"`
+	MOQ               *int      `db:"moq"`
+	UnitPrice         *float64  `db:"unit_price"`
+	Currency          string    `db:"currency"`
+	LinkedComponentID *string   `db:"linked_component_id"`
+	CapturedAt        time.Time `db:"captured_at"`
+	CreatedAt         time.Time `db:"created_at"`
 }
 
 func derefString(value *string) string {

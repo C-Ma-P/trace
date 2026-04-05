@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
+	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
@@ -14,6 +16,7 @@ import (
 	"componentmanager/internal/app"
 	"componentmanager/internal/assetsearch"
 	"componentmanager/internal/assetsearch/providers"
+	"componentmanager/internal/domain/registry"
 	"componentmanager/internal/kicad"
 	"componentmanager/internal/kicadconfig"
 	"componentmanager/internal/secretstore"
@@ -23,10 +26,18 @@ import (
 	"componentmanager/internal/windows"
 )
 
+var startupTime = time.Now()
+
+func startupLog(msg string) {
+	log.Printf("[startup +%dms] %s", time.Since(startupTime).Milliseconds(), msg)
+}
+
 //go:embed all:frontend/dist
 var assets embed.FS
 
 func main() {
+	startupLog("startup")
+
 	dsn := "postgres://meet:changeme@localhost:5432/componentmanager?sslmode=disable"
 	if d := os.Getenv("DATABASE_URL"); d != "" {
 		dsn = d
@@ -40,6 +51,7 @@ func main() {
 		defer db.Close()
 		backendApp = app.New(svc, assetSearchSvc)
 	}
+	startupLog("app constructed")
 
 	appSvc := &AppService{App: backendApp}
 	appInstance := application.New(application.Options{
@@ -55,6 +67,7 @@ func main() {
 	controller := windows.NewController(appInstance, backendApp)
 	appInstance.RegisterService(application.NewService(&WindowService{controller: controller}))
 
+	startupLog("before first window creation")
 	controller.EnsureLauncherWindow()
 
 	if err := appInstance.Run(); err != nil {
@@ -113,16 +126,22 @@ func (w *WindowService) SetLauncherView(view string) error {
 }
 
 func initService(dsn string) (*service.Service, *assetsearch.Service, *sqlx.DB, error) {
+	ctx := context.Background()
+
+	startupLog("before DB connect")
 	db, err := sqlx.Connect("pgx", dsn)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("cannot connect to PostgreSQL (%s): %w", dsn, err)
 	}
+	startupLog("after DB connect")
 
 	store := postgres.New(db)
-	if err := store.Migrate(context.Background()); err != nil {
+	startupLog("before migrations")
+	if err := store.Migrate(ctx); err != nil {
 		db.Close()
 		return nil, nil, nil, fmt.Errorf("database migration failed: %w", err)
 	}
+	startupLog("after migrations")
 
 	compRepo := postgres.NewComponentRepository(store)
 	projRepo := postgres.NewProjectRepository(store)
@@ -136,9 +155,36 @@ func initService(dsn string) (*service.Service, *assetsearch.Service, *sqlx.DB, 
 		SetKiCadConfig(kicadCfg).
 		SetSupplierConfig(supplierCfg)
 
-	if err := svc.SyncCanonicalAttributeDefinitions(context.Background()); err != nil {
+	// Versioned canonical attribute sync: only re-sync when the registry
+	// version constant changes, saving the cost on every normal startup.
+	wantVersion := strconv.Itoa(registry.CanonicalRegistryVersion)
+	startupLog("before canonical attribute version check (want v" + wantVersion + ")")
+	prefs, err := prefRepo.List(ctx, "system.canonical_registry_version")
+	if err != nil {
 		db.Close()
-		return nil, nil, nil, fmt.Errorf("attribute definition sync failed: %w", err)
+		return nil, nil, nil, fmt.Errorf("reading canonical registry version failed: %w", err)
+	}
+	storedVersion := prefs["system.canonical_registry_version"]
+
+	if storedVersion == wantVersion {
+		startupLog("canonical attribute sync skipped (version matched: v" + wantVersion + ")")
+	} else {
+		if storedVersion == "" {
+			startupLog("canonical attribute sync: no stored version, running sync")
+		} else {
+			startupLog("canonical attribute sync: version changed v" + storedVersion + " → v" + wantVersion + ", running sync")
+		}
+		if err := svc.SyncCanonicalAttributeDefinitions(ctx); err != nil {
+			db.Close()
+			return nil, nil, nil, fmt.Errorf("attribute definition sync failed: %w", err)
+		}
+		if err := prefRepo.SetMany(ctx, map[string]string{
+			"system.canonical_registry_version": wantVersion,
+		}); err != nil {
+			db.Close()
+			return nil, nil, nil, fmt.Errorf("storing canonical registry version failed: %w", err)
+		}
+		startupLog("canonical attribute sync complete (stored v" + wantVersion + ")")
 	}
 
 	reg := assetsearch.NewRegistry()
@@ -146,5 +192,6 @@ func initService(dsn string) (*service.Service, *assetsearch.Service, *sqlx.DB, 
 	reg.Register(&providers.UltraLibrarian{})
 	assetSearchSvc := assetsearch.NewService(reg, compRepo, assetRepo)
 
+	startupLog("service construction complete")
 	return svc, assetSearchSvc, db, nil
 }

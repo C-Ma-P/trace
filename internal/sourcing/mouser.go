@@ -3,7 +3,6 @@ package sourcing
 import (
 	"context"
 	"errors"
-	"strconv"
 	"strings"
 
 	mouser "github.com/PatrickWalther/go-mouser"
@@ -121,7 +120,7 @@ func (p *MouserProvider) FriendlyError(err error) string {
 
 func normalizeMouserPart(part mouser.Part) SupplierOffer {
 	packageName := packageFromMouserAttributes(part.ProductAttributes)
-	price, currency := lowestMouserPrice(part.PriceBreaks)
+	price := lowestMouserPrice(part.PriceBreaks)
 	raw := map[string]string{
 		"availability": part.Availability,
 		"leadTime":     part.LeadTime,
@@ -138,7 +137,6 @@ func normalizeMouserPart(part mouser.Part) SupplierOffer {
 		Stock:              intPointer(parseLooseInt(firstNonEmpty(part.AvailabilityInStock, part.FactoryStock))),
 		MOQ:                intPointer(parseLooseInt(part.Min)),
 		UnitPrice:          floatPointer(price),
-		Currency:           currency,
 		ProductURL:         strings.TrimSpace(part.ProductDetailUrl),
 		DatasheetURL:       strings.TrimSpace(part.DataSheetUrl),
 		Lifecycle:          strings.TrimSpace(part.LifecycleStatus),
@@ -156,20 +154,16 @@ func packageFromMouserAttributes(attributes []mouser.ProductAttribute) string {
 	return ""
 }
 
-func lowestMouserPrice(breaks []mouser.PriceBreak) (float64, string) {
+func lowestMouserPrice(breaks []mouser.PriceBreak) float64 {
 	best := 0.0
-	currency := ""
-	for i, priceBreak := range breaks {
-		priceText := strings.ReplaceAll(strings.TrimSpace(priceBreak.Price), ",", "")
-		priceText = strings.TrimLeft(priceText, "$€£¥")
-		price, err := strconv.ParseFloat(priceText, 64)
-		if err != nil {
+	for _, priceBreak := range breaks {
+		price := parsePrice(priceBreak.Price)
+		if price <= 0 {
 			continue
 		}
-		if i == 0 || price < best {
+		if best == 0 || price < best {
 			best = price
-			currency = strings.TrimSpace(priceBreak.Currency)
 		}
 	}
-	return best, currency
+	return best
 }

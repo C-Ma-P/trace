@@ -2,6 +2,8 @@ package registry
 
 import "componentmanager/internal/domain"
 
+const CanonicalRegistryVersion = 1
+
 var canonical = map[domain.Category]map[string]domain.AttributeDefinition{
 	domain.CategoryResistor:  indexByKey(resistorDefs),
 	domain.CategoryCapacitor: indexByKey(capacitorDefs),

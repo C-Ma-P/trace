@@ -163,6 +163,7 @@ type ProjectPlanResponse struct {
 type SourceRequirementResponse struct {
 	Offers    []SupplierOfferResponse          `json:"offers"`
 	Providers []SupplierProviderStatusResponse `json:"providers"`
+	Currency  string                           `json:"currency"`
 }
 
 type SupplierOfferResponse struct {
@@ -175,7 +176,6 @@ type SupplierOfferResponse struct {
 	Stock              *int              `json:"stock"`
 	MOQ                *int              `json:"moq"`
 	UnitPrice          *float64          `json:"unitPrice"`
-	Currency           string            `json:"currency"`
 	ProductURL         string            `json:"productUrl"`
 	DatasheetURL       string            `json:"datasheetUrl"`
 	Lifecycle          string            `json:"lifecycle"`
@@ -197,6 +197,8 @@ type RequirementPlanResponse struct {
 	ShortfallQuantity      int                              `json:"shortfallQuantity"`
 	SelectedPart           *RequirementSelectedPartResponse `json:"selectedPart"`
 	Matches                []ComponentMatchResponse         `json:"matches"`
+	Candidates             []PartCandidateResponse          `json:"candidates"`
+	SavedOffers            []SavedSupplierOfferResponse     `json:"savedOffers"`
 }
 
 type ComponentMatchResponse struct {
@@ -435,4 +437,76 @@ type KiCadImportCommitInput struct {
 	ExistingProjectID     string                  `json:"existingProjectId"`
 	SourceProjectPath     string                  `json:"sourceProjectPath"`
 	Rows                  []KiCadImportPreviewRow `json:"rows"`
+}
+
+// --- Part Candidates ---
+
+type PartCandidateResponse struct {
+	ID            string             `json:"id"`
+	ProjectID     string             `json:"projectId"`
+	RequirementID string             `json:"requirementId"`
+	ComponentID   string             `json:"componentId"`
+	Preferred     bool               `json:"preferred"`
+	Origin        string             `json:"origin"`
+	Component     *ComponentResponse `json:"component"`
+	CreatedAt     string             `json:"createdAt"`
+	UpdatedAt     string             `json:"updatedAt"`
+}
+
+// --- Saved Supplier Offers ---
+
+type SaveSupplierOfferInput struct {
+	RequirementID  string   `json:"requirementId"`
+	Provider       string   `json:"provider"`
+	ProviderPartID string   `json:"providerPartId"`
+	ProductURL     string   `json:"productUrl"`
+	Manufacturer   string   `json:"manufacturer"`
+	MPN            string   `json:"mpn"`
+	Description    string   `json:"description"`
+	Package        string   `json:"package"`
+	Stock          *int     `json:"stock"`
+	MOQ            *int     `json:"moq"`
+	UnitPrice      *float64 `json:"unitPrice"`
+	Currency       string   `json:"currency"`
+}
+
+type ImportSupplierOfferInput struct {
+	RequirementID  string   `json:"requirementId"`
+	Provider       string   `json:"provider"`
+	ProviderPartID string   `json:"providerPartId"`
+	ProductURL     string   `json:"productUrl"`
+	Manufacturer   string   `json:"manufacturer"`
+	MPN            string   `json:"mpn"`
+	Description    string   `json:"description"`
+	Package        string   `json:"package"`
+	Stock          *int     `json:"stock"`
+	MOQ            *int     `json:"moq"`
+	UnitPrice      *float64 `json:"unitPrice"`
+	Currency       string   `json:"currency"`
+	SetPreferred   bool     `json:"setPreferred"`
+}
+
+type SavedSupplierOfferResponse struct {
+	ID                string   `json:"id"`
+	ProjectID         string   `json:"projectId"`
+	RequirementID     string   `json:"requirementId"`
+	Provider          string   `json:"provider"`
+	ProviderPartID    string   `json:"providerPartId"`
+	ProductURL        string   `json:"productUrl"`
+	Manufacturer      string   `json:"manufacturer"`
+	MPN               string   `json:"mpn"`
+	Description       string   `json:"description"`
+	Package           string   `json:"package"`
+	Stock             *int     `json:"stock"`
+	MOQ               *int     `json:"moq"`
+	UnitPrice         *float64 `json:"unitPrice"`
+	Currency          string   `json:"currency"`
+	LinkedComponentID *string  `json:"linkedComponentId"`
+	CapturedAt        string   `json:"capturedAt"`
+	CreatedAt         string   `json:"createdAt"`
+}
+
+type ImportSupplierOfferResponse struct {
+	Candidate  PartCandidateResponse      `json:"candidate"`
+	SavedOffer SavedSupplierOfferResponse `json:"savedOffer"`
 }

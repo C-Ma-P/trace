@@ -21,7 +21,6 @@ type SupplierOffer struct {
 	Stock              *int              `json:"stock"`
 	MOQ                *int              `json:"moq"`
 	UnitPrice          *float64          `json:"unitPrice"`
-	Currency           string            `json:"currency"`
 	ProductURL         string            `json:"productUrl"`
 	DatasheetURL       string            `json:"datasheetUrl"`
 	Lifecycle          string            `json:"lifecycle"`
@@ -40,6 +39,7 @@ type ProviderStatus struct {
 type SourceResult struct {
 	Offers    []SupplierOffer  `json:"offers"`
 	Providers []ProviderStatus `json:"providers"`
+	Currency  string           `json:"currency"`
 }
 
 type RequirementQuery struct {

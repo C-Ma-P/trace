@@ -294,10 +294,255 @@ func (s *Service) ClearSelectedComponentForRequirement(ctx context.Context, requ
 	return s.projects.SetRequirementResolution(ctx, requirementID, nil)
 }
 
+// --- Part Candidates ---
+
+func (s *Service) AddPartCandidate(ctx context.Context, requirementID, componentID string) (domain.ProjectPartCandidate, error) {
+	req, err := s.projects.GetRequirement(ctx, requirementID)
+	if err != nil {
+		return domain.ProjectPartCandidate{}, err
+	}
+	component, err := s.components.GetComponent(ctx, componentID)
+	if err != nil {
+		return domain.ProjectPartCandidate{}, err
+	}
+	if component.Category != req.Category {
+		return domain.ProjectPartCandidate{}, domain.ErrCategoryMismatch{
+			RequirementCategory: req.Category,
+			ComponentCategory:   component.Category,
+		}
+	}
+
+	candidate := domain.ProjectPartCandidate{
+		ID:            newID(),
+		ProjectID:     req.ProjectID,
+		RequirementID: requirementID,
+		ComponentID:   componentID,
+		Preferred:     false,
+		Origin:        domain.CandidateOriginLocal,
+	}
+	created, err := s.projects.AddPartCandidate(ctx, candidate)
+	if err != nil {
+		return domain.ProjectPartCandidate{}, err
+	}
+	created.Component = &component
+	return created, nil
+}
+
+func (s *Service) SetPreferredCandidate(ctx context.Context, requirementID, candidateID string) error {
+	candidates, err := s.projects.ListPartCandidates(ctx, requirementID)
+	if err != nil {
+		return err
+	}
+	var target *domain.ProjectPartCandidate
+	for i := range candidates {
+		if candidates[i].ID == candidateID {
+			target = &candidates[i]
+			break
+		}
+	}
+	if target == nil {
+		return domain.ErrNotFound{ID: candidateID}
+	}
+
+	if err := s.projects.SetPreferredCandidate(ctx, requirementID, candidateID); err != nil {
+		return err
+	}
+
+	resolution := domain.NewComponentRequirementResolution(target.ComponentID)
+	return s.projects.SetRequirementResolution(ctx, requirementID, resolution)
+}
+
+func (s *Service) RemovePartCandidate(ctx context.Context, candidateID string) error {
+	return s.projects.RemovePartCandidate(ctx, candidateID)
+}
+
+func (s *Service) ListPartCandidates(ctx context.Context, requirementID string) ([]domain.ProjectPartCandidate, error) {
+	candidates, err := s.projects.ListPartCandidates(ctx, requirementID)
+	if err != nil {
+		return nil, err
+	}
+	return s.hydrateCandidates(ctx, candidates)
+}
+
+func (s *Service) hydrateCandidates(ctx context.Context, candidates []domain.ProjectPartCandidate) ([]domain.ProjectPartCandidate, error) {
+	seen := make(map[string]*domain.Component)
+	for i := range candidates {
+		cid := candidates[i].ComponentID
+		if _, ok := seen[cid]; !ok {
+			component, err := s.components.GetComponent(ctx, cid)
+			if err != nil {
+				continue
+			}
+			seen[cid] = &component
+		}
+		candidates[i].Component = seen[cid]
+	}
+	return candidates, nil
+}
+
+// --- Saved Supplier Offers ---
+
+func (s *Service) SaveSupplierOfferForRequirement(ctx context.Context, requirementID string, offer domain.SavedSupplierOffer) (domain.SavedSupplierOffer, error) {
+	req, err := s.projects.GetRequirement(ctx, requirementID)
+	if err != nil {
+		return domain.SavedSupplierOffer{}, err
+	}
+	offer.ID = newID()
+	offer.ProjectID = req.ProjectID
+	offer.RequirementID = requirementID
+	return s.projects.SaveSupplierOffer(ctx, offer)
+}
+
+func (s *Service) RemoveSavedSupplierOffer(ctx context.Context, offerID string) error {
+	return s.projects.RemoveSavedSupplierOffer(ctx, offerID)
+}
+
+func (s *Service) ListSavedSupplierOffers(ctx context.Context, requirementID string) ([]domain.SavedSupplierOffer, error) {
+	return s.projects.ListSavedSupplierOffers(ctx, requirementID)
+}
+
+func (s *Service) ImportSupplierOffer(ctx context.Context, requirementID string, offer domain.SavedSupplierOffer, setPreferred bool) (domain.ProjectPartCandidate, domain.SavedSupplierOffer, error) {
+	req, err := s.projects.GetRequirement(ctx, requirementID)
+	if err != nil {
+		return domain.ProjectPartCandidate{}, domain.SavedSupplierOffer{}, err
+	}
+
+	component, err := s.CreateComponent(ctx, domain.Component{
+		Category:     req.Category,
+		MPN:          offer.MPN,
+		Manufacturer: offer.Manufacturer,
+		Package:      offer.Package,
+		Description:  offer.Description,
+	})
+	if err != nil {
+		return domain.ProjectPartCandidate{}, domain.SavedSupplierOffer{}, fmt.Errorf("create component from offer: %w", err)
+	}
+
+	offer.ID = newID()
+	offer.ProjectID = req.ProjectID
+	offer.RequirementID = requirementID
+	offer.LinkedComponentID = &component.ID
+	savedOffer, err := s.projects.SaveSupplierOffer(ctx, offer)
+	if err != nil {
+		return domain.ProjectPartCandidate{}, domain.SavedSupplierOffer{}, err
+	}
+
+	candidate := domain.ProjectPartCandidate{
+		ID:            newID(),
+		ProjectID:     req.ProjectID,
+		RequirementID: requirementID,
+		ComponentID:   component.ID,
+		Preferred:     false,
+		Origin:        domain.CandidateOriginImportedSupplier,
+	}
+	created, err := s.projects.AddPartCandidate(ctx, candidate)
+	if err != nil {
+		return domain.ProjectPartCandidate{}, savedOffer, err
+	}
+	created.Component = &component
+
+	if setPreferred {
+		if err := s.projects.SetPreferredCandidate(ctx, requirementID, created.ID); err != nil {
+			return created, savedOffer, err
+		}
+		created.Preferred = true
+		resolution := domain.NewComponentRequirementResolution(component.ID)
+		if err := s.projects.SetRequirementResolution(ctx, requirementID, resolution); err != nil {
+			return created, savedOffer, err
+		}
+	}
+
+	return created, savedOffer, nil
+}
+
+func (s *Service) AddLocalComponentAsCandidateAndSetPreferred(ctx context.Context, requirementID, componentID string) (domain.ProjectPartCandidate, error) {
+	req, err := s.projects.GetRequirement(ctx, requirementID)
+	if err != nil {
+		return domain.ProjectPartCandidate{}, err
+	}
+	component, err := s.components.GetComponent(ctx, componentID)
+	if err != nil {
+		return domain.ProjectPartCandidate{}, err
+	}
+	if component.Category != req.Category {
+		return domain.ProjectPartCandidate{}, domain.ErrCategoryMismatch{
+			RequirementCategory: req.Category,
+			ComponentCategory:   component.Category,
+		}
+	}
+
+	// Check if already a candidate
+	existing, err := s.projects.ListPartCandidates(ctx, requirementID)
+	if err != nil {
+		return domain.ProjectPartCandidate{}, err
+	}
+	var candidateID string
+	for _, c := range existing {
+		if c.ComponentID == componentID {
+			candidateID = c.ID
+			break
+		}
+	}
+
+	if candidateID == "" {
+		candidate := domain.ProjectPartCandidate{
+			ID:            newID(),
+			ProjectID:     req.ProjectID,
+			RequirementID: requirementID,
+			ComponentID:   componentID,
+			Preferred:     false,
+			Origin:        domain.CandidateOriginLocal,
+		}
+		created, err := s.projects.AddPartCandidate(ctx, candidate)
+		if err != nil {
+			return domain.ProjectPartCandidate{}, err
+		}
+		candidateID = created.ID
+	}
+
+	if err := s.projects.SetPreferredCandidate(ctx, requirementID, candidateID); err != nil {
+		return domain.ProjectPartCandidate{}, err
+	}
+
+	resolution := domain.NewComponentRequirementResolution(componentID)
+	if err := s.projects.SetRequirementResolution(ctx, requirementID, resolution); err != nil {
+		return domain.ProjectPartCandidate{}, err
+	}
+
+	return domain.ProjectPartCandidate{
+		ID:            candidateID,
+		ProjectID:     req.ProjectID,
+		RequirementID: requirementID,
+		ComponentID:   componentID,
+		Preferred:     true,
+		Origin:        domain.CandidateOriginLocal,
+		Component:     &component,
+	}, nil
+}
+
 func (s *Service) PlanProject(ctx context.Context, projectID string) (domain.ProjectPlan, error) {
 	project, err := s.projects.GetProject(ctx, projectID)
 	if err != nil {
 		return domain.ProjectPlan{}, err
+	}
+
+	allCandidates, err := s.projects.ListPartCandidatesByProject(ctx, projectID)
+	if err != nil {
+		return domain.ProjectPlan{}, err
+	}
+	allCandidates, _ = s.hydrateCandidates(ctx, allCandidates)
+	candidatesByReq := make(map[string][]domain.ProjectPartCandidate)
+	for _, c := range allCandidates {
+		candidatesByReq[c.RequirementID] = append(candidatesByReq[c.RequirementID], c)
+	}
+
+	allOffers, err := s.projects.ListSavedSupplierOffersByProject(ctx, projectID)
+	if err != nil {
+		return domain.ProjectPlan{}, err
+	}
+	offersByReq := make(map[string][]domain.SavedSupplierOffer)
+	for _, o := range allOffers {
+		offersByReq[o.RequirementID] = append(offersByReq[o.RequirementID], o)
 	}
 
 	plan := domain.ProjectPlan{Project: project}
@@ -322,12 +567,23 @@ func (s *Service) PlanProject(ctx context.Context, projectID string) (domain.Pro
 			return domain.ProjectPlan{}, err
 		}
 
+		candidates := candidatesByReq[requirement.ID]
+		if candidates == nil {
+			candidates = []domain.ProjectPartCandidate{}
+		}
+		offers := offersByReq[requirement.ID]
+		if offers == nil {
+			offers = []domain.SavedSupplierOffer{}
+		}
+
 		plan.Requirements = append(plan.Requirements, domain.RequirementPlan{
 			Requirement:            requirement,
 			MatchingOnHandQuantity: matchingOnHand,
 			ShortfallQuantity:      shortfall,
 			SelectedPart:           selectedPart,
 			Matches:                matches,
+			Candidates:             candidates,
+			SavedOffers:            offers,
 		})
 	}
 

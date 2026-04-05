@@ -72,7 +72,7 @@ func (p *LCSCProvider) FriendlyError(err error) string {
 }
 
 func normalizeLCSCProduct(product lcsc.Product) SupplierOffer {
-	price, currency := lowestLCSCPrice(product.ProductPriceList)
+	price := lowestLCSCPrice(product.ProductPriceList)
 	raw := map[string]string{
 		"catalog":       product.CatalogName,
 		"parentCatalog": product.ParentCatalogName,
@@ -88,24 +88,24 @@ func normalizeLCSCProduct(product lcsc.Product) SupplierOffer {
 		Stock:              intPointer(product.StockNumber),
 		MOQ:                intPointer(product.MinPacketNumber),
 		UnitPrice:          floatPointer(price),
-		Currency:           currency,
 		ProductURL:         product.GetProductURL(),
 		DatasheetURL:       strings.TrimSpace(product.PdfURL),
 		Raw:                raw,
 	}
 }
 
-func lowestLCSCPrice(prices []lcsc.PriceBreak) (float64, string) {
+func lowestLCSCPrice(prices []lcsc.PriceBreak) float64 {
 	best := 0.0
-	currency := ""
-	for i, priceBreak := range prices {
+	for _, priceBreak := range prices {
 		price := float64(priceBreak.ProductPrice)
-		if i == 0 || price < best {
+		if price <= 0 {
+			continue
+		}
+		if best == 0 || price < best {
 			best = price
-			currency = strings.TrimSpace(priceBreak.CurrencySymbol)
 		}
 	}
-	return best, currency
+	return best
 }
 
 func providerSearchTerms(query RequirementQuery) []string {
