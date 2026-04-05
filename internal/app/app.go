@@ -6,6 +6,7 @@ import (
 	"componentmanager/internal/assetsearch"
 	"componentmanager/internal/domain"
 	"componentmanager/internal/domain/registry"
+	"componentmanager/internal/ingest"
 	"componentmanager/internal/launcher"
 	"componentmanager/internal/service"
 )
@@ -13,12 +14,13 @@ import (
 type App struct {
 	svc         *service.Service
 	assetSearch *assetsearch.Service
+	ingest      *ingest.Service
 	launcher    *launcher.Store
 	initErr     string
 }
 
-func New(svc *service.Service, assetSearch *assetsearch.Service) *App {
-	return &App{svc: svc, assetSearch: assetSearch, launcher: launcher.NewStore()}
+func New(svc *service.Service, assetSearch *assetsearch.Service, ingestSvc *ingest.Service) *App {
+	return &App{svc: svc, assetSearch: assetSearch, ingest: ingestSvc, launcher: launcher.NewStore()}
 }
 
 func NewFailed(errMsg string) *App {

@@ -155,6 +155,12 @@ func (s *stubProjectRepo) AddPartCandidate(_ context.Context, c domain.ProjectPa
 func (s *stubProjectRepo) SetPreferredCandidate(_ context.Context, _, _ string) error {
 	return nil
 }
+func (s *stubProjectRepo) ClearPreferredCandidate(_ context.Context, _ string) error {
+	return nil
+}
+func (s *stubProjectRepo) GetPartCandidate(_ context.Context, id string) (domain.ProjectPartCandidate, error) {
+	return domain.ProjectPartCandidate{ID: id}, nil
+}
 func (s *stubProjectRepo) RemovePartCandidate(_ context.Context, _ string) error {
 	return nil
 }
@@ -177,6 +183,12 @@ func (s *stubProjectRepo) ListSavedSupplierOffersByProject(_ context.Context, _ 
 	return nil, nil
 }
 func (s *stubProjectRepo) LinkSupplierOfferToComponent(_ context.Context, _, _ string) error {
+	return nil
+}
+func (s *stubProjectRepo) GetSavedSupplierOffer(_ context.Context, id string) (domain.SavedSupplierOffer, error) {
+	return domain.SavedSupplierOffer{ID: id}, nil
+}
+func (s *stubProjectRepo) UpdatePartCandidateComponent(_ context.Context, _ string, _ string, _ domain.CandidateOrigin) error {
 	return nil
 }
 

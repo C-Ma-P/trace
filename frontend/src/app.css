@@ -165,6 +165,12 @@ input, select, textarea {
   font-size: 12px;
 }
 
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .form-group {
   display: flex;
   flex-direction: column;

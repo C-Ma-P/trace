@@ -2,6 +2,7 @@
   import Tabs from '../ui/Tabs.svelte';
   import RequirementsTab from './RequirementsTab.svelte';
   import PlanTab from './PlanTab.svelte';
+  import FinalizeTab from './FinalizeTab.svelte';
   import { type Project, type CategoryInfo } from '../backend';
 
   let { project, categories = [], onupdated }: {
@@ -15,6 +16,7 @@
   const tabs = [
     { key: 'requirements', label: 'Requirements' },
     { key: 'plan', label: 'Plan' },
+    { key: 'finalize', label: 'Finalize' },
   ];
 </script>
 
@@ -35,6 +37,8 @@
       <RequirementsTab {project} {categories} {onupdated} />
     {:else if activeTab === 'plan'}
       <PlanTab {project} {categories} {onupdated} />
+    {:else if activeTab === 'finalize'}
+      <FinalizeTab {project} {categories} {onupdated} />
     {/if}
   </div>
 </div>

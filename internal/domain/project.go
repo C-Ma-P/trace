@@ -149,20 +149,23 @@ type CandidateOrigin string
 const (
 	CandidateOriginLocal            CandidateOrigin = "local"
 	CandidateOriginImportedSupplier CandidateOrigin = "imported_from_supplier"
+	CandidateOriginProvider         CandidateOrigin = "provider"
 )
 
 type ProjectPartCandidate struct {
 	ID            string          `db:"id"`
 	ProjectID     string          `db:"project_id"`
 	RequirementID string          `db:"requirement_id"`
-	ComponentID   string          `db:"component_id"`
+	ComponentID   *string         `db:"component_id"`
+	SourceOfferID *string         `db:"source_offer_id"`
 	Preferred     bool            `db:"preferred"`
 	Origin        CandidateOrigin `db:"origin"`
 	CreatedAt     time.Time       `db:"created_at"`
 	UpdatedAt     time.Time       `db:"updated_at"`
 
 	// Hydrated by service layer, not persisted.
-	Component *Component `db:"-"`
+	Component   *Component          `db:"-"`
+	SourceOffer *SavedSupplierOffer `db:"-"`
 }
 
 type SavedSupplierOffer struct {

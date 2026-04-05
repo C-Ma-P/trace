@@ -157,10 +157,12 @@ export interface PartCandidate {
   id: string;
   projectId: string;
   requirementId: string;
-  componentId: string;
+  componentId: string | null;
+  sourceOfferId: string | null;
   preferred: boolean;
-  origin: 'local' | 'imported_from_supplier';
+  origin: 'local' | 'imported_from_supplier' | 'provider';
   component: Component | null;
+  sourceOffer: SavedSupplierOffer | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -601,6 +603,13 @@ export function removePartCandidate(candidateId: string): Promise<void> {
   return call('RemovePartCandidate', candidateId);
 }
 
+export function demotePreferredCandidate(
+  requirementId: string,
+  candidateId: string
+): Promise<void> {
+  return call('DemotePreferredCandidate', requirementId, candidateId);
+}
+
 export function saveSupplierOffer(input: {
   requirementId: string;
   provider: string;
@@ -638,6 +647,28 @@ export function importSupplierOffer(input: {
 
 export function removeSavedSupplierOffer(offerId: string): Promise<void> {
   return call('RemoveSavedSupplierOffer', offerId);
+}
+
+export function addProviderCandidate(input: {
+  requirementId: string;
+  provider: string;
+  providerPartId: string;
+  productUrl: string;
+  manufacturer: string;
+  mpn: string;
+  description: string;
+  package: string;
+  stock: number | null;
+  moq: number | null;
+  unitPrice: number | null;
+  currency: string;
+  setPreferred: boolean;
+}): Promise<PartCandidate> {
+  return call('AddProviderCandidate', input);
+}
+
+export function importProviderCandidate(candidateId: string): Promise<PartCandidate> {
+  return call('ImportProviderCandidate', candidateId);
 }
 
 export function getComponentDetail(id: string): Promise<ComponentDetail> {

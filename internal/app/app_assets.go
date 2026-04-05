@@ -3,10 +3,12 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"componentmanager/internal/assetsearch"
 	"componentmanager/internal/domain"
+	"componentmanager/internal/ingest"
 )
 
 func (a *App) CreateComponentAsset(req CreateComponentAssetInput) (ComponentAssetResponse, error) {
@@ -168,7 +170,8 @@ func searchResponseToApp(r assetsearch.SearchResponse) AssetSearchResponse {
 			}
 		}
 		results[i] = AssetSearchProviderResult{
-			Provider:   pr.Provider,
+			ProviderId:    pr.ProviderID,
+			ProviderLabel: pr.ProviderLabel,
 			Candidates: candidates,
 			Error:      pr.Error,
 		}
@@ -192,5 +195,56 @@ func importResponseToApp(r assetsearch.ImportResponse) AssetImportResponse {
 	return AssetImportResponse{
 		ImportedAssets: assets,
 		Warnings:       warnings,
+	}
+}
+
+func (a *App) IngestComponentAssets(componentID string, filePath string) (IngestComponentAssetsResponse, error) {
+	if err := a.checkReady(); err != nil {
+		return IngestComponentAssetsResponse{}, err
+	}
+	if a.ingest == nil {
+		return IngestComponentAssetsResponse{}, fmt.Errorf("ingestion service not available")
+	}
+
+	result, err := a.ingest.Ingest(context.Background(), ingest.IngestRequest{
+		ComponentID: componentID,
+		FilePath:    filePath,
+		SourceKind:  "local",
+	})
+	if err != nil {
+		return IngestComponentAssetsResponse{}, err
+	}
+
+	return ingestResultToResponse(result), nil
+}
+
+func ingestResultToResponse(r ingest.IngestResult) IngestComponentAssetsResponse {
+	assets := make([]IngestedAssetResponse, len(r.Assets))
+	for i, a := range r.Assets {
+		assets[i] = IngestedAssetResponse{
+			AssetID:          a.AssetID,
+			AssetType:        a.AssetType,
+			Label:            a.Label,
+			StoredPath:       a.StoredPath,
+			OriginalFilename: a.OriginalFilename,
+		}
+	}
+	warnings := r.Warnings
+	if warnings == nil {
+		warnings = []string{}
+	}
+	unsupported := r.Unsupported
+	if unsupported == nil {
+		unsupported = []string{}
+	}
+	countByType := r.CountByType
+	if countByType == nil {
+		countByType = map[string]int{}
+	}
+	return IngestComponentAssetsResponse{
+		Assets:      assets,
+		Warnings:    warnings,
+		Unsupported: unsupported,
+		CountByType: countByType,
 	}
 }

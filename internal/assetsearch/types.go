@@ -17,9 +17,10 @@ type SearchResponse struct {
 // ProviderResult holds the search outcome from a single provider.
 // If Error is non-empty, the provider failed and Candidates should be ignored.
 type ProviderResult struct {
-	Provider   string            `json:"provider"`
-	Candidates []SearchCandidate `json:"candidates"`
-	Error      string            `json:"error"`
+	ProviderID    string            `json:"providerId"`
+	ProviderLabel string            `json:"providerLabel"`
+	Candidates    []SearchCandidate `json:"candidates"`
+	Error         string            `json:"error"`
 }
 
 // SearchCandidate is a normalized asset candidate returned by a provider.

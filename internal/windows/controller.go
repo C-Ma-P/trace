@@ -226,6 +226,27 @@ func (c *Controller) PickDirectory(startDir string) (string, error) {
 	return strings.TrimSpace(selectedDir), nil
 }
 
+func (c *Controller) PickFile(title string, filters ...application.FileFilter) (string, error) {
+	dialog := c.app.Dialog.OpenFile().
+		SetTitle(title).
+		SetButtonText("Import").
+		CanChooseDirectories(true).
+		CanChooseFiles(true)
+
+	for _, f := range filters {
+		dialog.AddFilter(f.DisplayName, f.Pattern)
+	}
+	if current := c.app.Window.Current(); current != nil {
+		dialog.AttachToWindow(current)
+	}
+
+	selected, err := dialog.PromptForSingleSelection()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(selected), nil
+}
+
 func (c *Controller) SetLauncherView(view string) error {
 	current := c.app.Window.Current()
 	if current == nil {

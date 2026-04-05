@@ -526,6 +526,13 @@ func (a *App) RemovePartCandidate(candidateID string) error {
 	return a.svc.RemovePartCandidate(context.Background(), candidateID)
 }
 
+func (a *App) DemotePreferredCandidate(requirementID, candidateID string) error {
+	if err := a.checkReady(); err != nil {
+		return err
+	}
+	return a.svc.DemotePreferredCandidate(context.Background(), requirementID, candidateID)
+}
+
 // --- Saved Supplier Offers ---
 
 func (a *App) SaveSupplierOffer(input SaveSupplierOfferInput) (SavedSupplierOfferResponse, error) {
@@ -588,20 +595,63 @@ func (a *App) RemoveSavedSupplierOffer(offerID string) error {
 	return a.svc.RemoveSavedSupplierOffer(context.Background(), offerID)
 }
 
+func (a *App) AddProviderCandidate(input AddProviderCandidateInput) (PartCandidateResponse, error) {
+	if err := a.checkReady(); err != nil {
+		return PartCandidateResponse{}, err
+	}
+	offer := domain.SavedSupplierOffer{
+		Provider:       input.Provider,
+		ProviderPartID: input.ProviderPartID,
+		ProductURL:     input.ProductURL,
+		Manufacturer:   input.Manufacturer,
+		MPN:            input.MPN,
+		Description:    input.Description,
+		Package:        input.Package,
+		Stock:          input.Stock,
+		MOQ:            input.MOQ,
+		UnitPrice:      input.UnitPrice,
+		Currency:       input.Currency,
+		CapturedAt:     time.Now().UTC(),
+	}
+	candidate, err := a.svc.AddProviderCandidate(context.Background(), input.RequirementID, offer, input.SetPreferred)
+	if err != nil {
+		return PartCandidateResponse{}, err
+	}
+	return partCandidateToResponse(candidate), nil
+}
+
+func (a *App) ImportProviderCandidate(candidateID string) (PartCandidateResponse, error) {
+	if err := a.checkReady(); err != nil {
+		return PartCandidateResponse{}, err
+	}
+	candidate, err := a.svc.ImportProviderCandidate(context.Background(), candidateID)
+	if err != nil {
+		return PartCandidateResponse{}, err
+	}
+	return partCandidateToResponse(candidate), nil
+}
+
 func partCandidateToResponse(c domain.ProjectPartCandidate) PartCandidateResponse {
 	var comp *ComponentResponse
 	if c.Component != nil {
 		cr := componentToResponse(*c.Component)
 		comp = &cr
 	}
+	var offer *SavedSupplierOfferResponse
+	if c.SourceOffer != nil {
+		or := savedOfferToResponse(*c.SourceOffer)
+		offer = &or
+	}
 	return PartCandidateResponse{
 		ID:            c.ID,
 		ProjectID:     c.ProjectID,
 		RequirementID: c.RequirementID,
 		ComponentID:   c.ComponentID,
+		SourceOfferID: c.SourceOfferID,
 		Preferred:     c.Preferred,
 		Origin:        string(c.Origin),
 		Component:     comp,
+		SourceOffer:   offer,
 		CreatedAt:     c.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:     c.UpdatedAt.Format(time.RFC3339),
 	}

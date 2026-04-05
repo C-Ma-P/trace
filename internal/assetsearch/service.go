@@ -50,13 +50,15 @@ func (s *Service) SearchForComponent(ctx context.Context, req SearchRequest) (Se
 		candidates, err := p.Search(ctx, req)
 		if err != nil {
 			results[i] = ProviderResult{
-				Provider: p.DisplayName(),
-				Error:    err.Error(),
+				ProviderID:    p.Name(),
+				ProviderLabel: p.DisplayName(),
+				Error:         err.Error(),
 			}
 		} else {
 			results[i] = ProviderResult{
-				Provider:   p.DisplayName(),
-				Candidates: candidates,
+				ProviderID:    p.Name(),
+				ProviderLabel: p.DisplayName(),
+				Candidates:    candidates,
 			}
 		}
 	}

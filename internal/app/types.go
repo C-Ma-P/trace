@@ -354,9 +354,10 @@ type AssetSearchResponse struct {
 }
 
 type AssetSearchProviderResult struct {
-	Provider   string                 `json:"provider"`
-	Candidates []AssetSearchCandidate `json:"candidates"`
-	Error      string                 `json:"error"`
+	ProviderId    string                 `json:"providerId"`
+	ProviderLabel string                 `json:"providerLabel"`
+	Candidates    []AssetSearchCandidate `json:"candidates"`
+	Error         string                 `json:"error"`
 }
 
 type AssetSearchCandidate struct {
@@ -384,6 +385,21 @@ type AssetImportedAsset struct {
 	AssetType string `json:"assetType"`
 	Label     string `json:"label"`
 	URLOrPath string `json:"urlOrPath"`
+}
+
+type IngestComponentAssetsResponse struct {
+	Assets      []IngestedAssetResponse `json:"assets"`
+	Warnings    []string                `json:"warnings"`
+	Unsupported []string                `json:"unsupported"`
+	CountByType map[string]int          `json:"countByType"`
+}
+
+type IngestedAssetResponse struct {
+	AssetID          string `json:"assetId"`
+	AssetType        string `json:"assetType"`
+	Label            string `json:"label"`
+	StoredPath       string `json:"storedPath"`
+	OriginalFilename string `json:"originalFilename"`
 }
 
 type KiCadProjectCandidateResponse struct {
@@ -442,15 +458,17 @@ type KiCadImportCommitInput struct {
 // --- Part Candidates ---
 
 type PartCandidateResponse struct {
-	ID            string             `json:"id"`
-	ProjectID     string             `json:"projectId"`
-	RequirementID string             `json:"requirementId"`
-	ComponentID   string             `json:"componentId"`
-	Preferred     bool               `json:"preferred"`
-	Origin        string             `json:"origin"`
-	Component     *ComponentResponse `json:"component"`
-	CreatedAt     string             `json:"createdAt"`
-	UpdatedAt     string             `json:"updatedAt"`
+	ID            string                      `json:"id"`
+	ProjectID     string                      `json:"projectId"`
+	RequirementID string                      `json:"requirementId"`
+	ComponentID   *string                     `json:"componentId"`
+	SourceOfferID *string                     `json:"sourceOfferId"`
+	Preferred     bool                        `json:"preferred"`
+	Origin        string                      `json:"origin"`
+	Component     *ComponentResponse          `json:"component"`
+	SourceOffer   *SavedSupplierOfferResponse `json:"sourceOffer"`
+	CreatedAt     string                      `json:"createdAt"`
+	UpdatedAt     string                      `json:"updatedAt"`
 }
 
 // --- Saved Supplier Offers ---
@@ -509,4 +527,20 @@ type SavedSupplierOfferResponse struct {
 type ImportSupplierOfferResponse struct {
 	Candidate  PartCandidateResponse      `json:"candidate"`
 	SavedOffer SavedSupplierOfferResponse `json:"savedOffer"`
+}
+
+type AddProviderCandidateInput struct {
+	RequirementID  string   `json:"requirementId"`
+	Provider       string   `json:"provider"`
+	ProviderPartID string   `json:"providerPartId"`
+	ProductURL     string   `json:"productUrl"`
+	Manufacturer   string   `json:"manufacturer"`
+	MPN            string   `json:"mpn"`
+	Description    string   `json:"description"`
+	Package        string   `json:"package"`
+	Stock          *int     `json:"stock"`
+	MOQ            *int     `json:"moq"`
+	UnitPrice      *float64 `json:"unitPrice"`
+	Currency       string   `json:"currency"`
+	SetPreferred   bool     `json:"setPreferred"`
 }

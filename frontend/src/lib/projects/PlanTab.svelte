@@ -7,9 +7,7 @@
     setPreferredCandidate,
     setPreferredLocalComponent,
     removePartCandidate,
-    saveSupplierOffer,
-    importSupplierOffer,
-    removeSavedSupplierOffer,
+    addProviderCandidate,
     categoryDisplayName,
     type Project,
     type ProjectPlan,
@@ -20,8 +18,8 @@
     type SupplierProviderStatus,
     type CategoryInfo,
     type PartCandidate,
-    type SavedSupplierOffer,
   } from '../backend';
+  import { Browser } from '@wailsio/runtime';
 
   let { project, categories = [], onupdated }: {
     project: Project;
@@ -125,11 +123,16 @@
     }
   }
 
-  async function handleRemoveCandidate(candidateId: string) {
+  async function handleRemoveCandidate(candidateId: string, isPreferred: boolean) {
+    if (isPreferred) {
+      const confirmed = confirm('This is the preferred candidate. Removing it will also clear the current engineering choice for this requirement. Continue?');
+      if (!confirmed) return;
+    }
     error = '';
     try {
       await removePartCandidate(candidateId);
       await runPlan();
+      if (isPreferred) onupdated?.();
     } catch (e: any) {
       error = e?.message ?? String(e);
     }
@@ -146,41 +149,19 @@
     }
   }
 
-  async function handleSaveOffer(requirementId: string, offer: SupplierOfferType, currency: string) {
-    const key = `save-${requirementId}-${offer.supplierPartNumber}`;
-    if (actionInProgress[key]) return;
-    actionInProgress = { ...actionInProgress, [key]: true };
-    error = '';
-    try {
-      await saveSupplierOffer({
-        requirementId,
-        provider: offer.provider,
-        providerPartId: offer.supplierPartNumber,
-        productUrl: offer.productUrl,
-        manufacturer: offer.manufacturer,
-        mpn: offer.mpn,
-        description: offer.description,
-        package: offer.package,
-        stock: offer.stock,
-        moq: offer.moq,
-        unitPrice: offer.unitPrice,
-        currency,
-      });
-      await runPlan();
-    } catch (e: any) {
-      error = e?.message ?? String(e);
-    } finally {
-      actionInProgress = { ...actionInProgress, [key]: false };
+  function openUrl(url: string) {
+    if (url) {
+      Browser.OpenURL(url);
     }
   }
 
-  async function handleImportOffer(requirementId: string, offer: SupplierOfferType, currency: string, setPreferred: boolean) {
-    const key = `import-${requirementId}-${offer.supplierPartNumber}`;
+  async function handleAddProviderCandidate(requirementId: string, offer: SupplierOfferType, currency: string, setPreferred: boolean) {
+    const key = `provider-${requirementId}-${offer.supplierPartNumber}`;
     if (actionInProgress[key]) return;
     actionInProgress = { ...actionInProgress, [key]: true };
     error = '';
     try {
-      await importSupplierOffer({
+      await addProviderCandidate({
         requirementId,
         provider: offer.provider,
         providerPartId: offer.supplierPartNumber,
@@ -204,20 +185,17 @@
     }
   }
 
-  async function handleRemoveSavedOffer(offerId: string) {
-    error = '';
-    try {
-      await removeSavedSupplierOffer(offerId);
-      await runPlan();
-    } catch (e: any) {
-      error = e?.message ?? String(e);
-    }
-  }
-
   function statusBadge(rp: RequirementPlan): { class: string; text: string } {
+    const preferred = rp.candidates.find(c => c.preferred);
     if (rp.selectedPart) {
       if (rp.selectedPart.shortfallQuantity > 0) {
         return { class: 'badge-warning', text: `Shortfall ${rp.selectedPart.shortfallQuantity}` };
+      }
+      return { class: 'badge-success', text: 'Resolved' };
+    }
+    if (preferred) {
+      if (preferred.origin === 'provider') {
+        return { class: 'badge-warning', text: 'Provider (not imported)' };
       }
       return { class: 'badge-success', text: 'Resolved' };
     }
@@ -248,13 +226,51 @@
     return value.toLocaleString();
   }
 
-  function formatSupplierPrice(offer: SupplierOfferType | SavedSupplierOffer): string {
+  function formatSupplierPrice(offer: SupplierOfferType): string {
     if (offer.unitPrice === null) return '—';
     return offer.unitPrice < 1 ? offer.unitPrice.toFixed(4) : offer.unitPrice.toFixed(2);
   }
 
   function supplierResult(requirementId: string): SourceRequirementResult | null {
     return supplierResultsByRequirementId[requirementId] ?? null;
+  }
+
+  function offerMatchKey(provider: string, supplierPartNumber: string, mpn: string): string {
+    // Use the supplier SKU when non-empty; fall back to provider+MPN.
+    const sku = supplierPartNumber?.trim();
+    return sku ? `${provider}::sku::${sku}` : `${provider}::mpn::${mpn}`;
+  }
+
+  function isAlreadyCandidate(rp: RequirementPlan, offer: SupplierOfferType): boolean {
+    const key = offerMatchKey(offer.provider, offer.supplierPartNumber, offer.mpn);
+    return rp.candidates.some(c =>
+      c.sourceOffer &&
+      offerMatchKey(c.sourceOffer.provider, c.sourceOffer.providerPartId, c.sourceOffer.mpn) === key
+    );
+  }
+
+  function originLabel(origin: string): string {
+    if (origin === 'provider') return 'Provider';
+    if (origin === 'imported_from_supplier') return 'Imported';
+    return 'Local';
+  }
+
+  function candidateDisplayMpn(c: PartCandidate): string {
+    if (c.component?.mpn) return c.component.mpn;
+    if (c.sourceOffer?.mpn) return c.sourceOffer.mpn;
+    return '—';
+  }
+
+  function candidateDisplayManufacturer(c: PartCandidate): string {
+    if (c.component?.manufacturer) return c.component.manufacturer;
+    if (c.sourceOffer?.manufacturer) return c.sourceOffer.manufacturer;
+    return '—';
+  }
+
+  function candidateDisplayPackage(c: PartCandidate): string {
+    if (c.component?.package) return c.component.package;
+    if (c.sourceOffer?.package) return c.sourceOffer.package;
+    return '—';
   }
 
   function resolvedPartLabel(selectedPart: RequirementSelectedPart | null): string {
@@ -316,9 +332,26 @@
                 class="btn btn-ghost btn-sm"
                 onclick={() => handleClearSelection(rp.requirement.id)}
               >
-                Clear
+                Clear Preferred
               </button>
             </div>
+          {:else if rp.candidates.some(c => c.preferred)}
+            {@const preferred = rp.candidates.find(c => c.preferred)}
+            {#if preferred}
+              <div class="selected-banner">
+                <div class="selected-banner-copy">
+                  <span class="selected-banner-label">Preferred part <span class="origin-badge origin-provider">Provider</span></span>
+                  <strong>{candidateDisplayMpn(preferred)} — {candidateDisplayManufacturer(preferred)}</strong>
+                  <span class="selected-banner-meta">Not yet imported into catalog</span>
+                </div>
+                <button
+                  class="btn btn-ghost btn-sm"
+                  onclick={() => handleClearSelection(rp.requirement.id)}
+                >
+                  Clear Preferred
+                </button>
+              </div>
+            {/if}
           {/if}
 
           {#if expandedReq === rp.requirement.id}
@@ -343,10 +376,10 @@
                     <tbody>
                       {#each rp.candidates as candidate}
                         <tr class:selected-match={candidate.preferred}>
-                          <td class="mpn-cell">{candidate.component?.mpn || '—'}</td>
-                          <td>{candidate.component?.manufacturer || '—'}</td>
-                          <td>{candidate.component?.package || '—'}</td>
-                          <td><span class="origin-badge">{candidate.origin === 'imported_from_supplier' ? 'Imported' : 'Local'}</span></td>
+                          <td class="mpn-cell">{candidateDisplayMpn(candidate)}</td>
+                          <td>{candidateDisplayManufacturer(candidate)}</td>
+                          <td>{candidateDisplayPackage(candidate)}</td>
+                          <td><span class="origin-badge origin-{candidate.origin}">{originLabel(candidate.origin)}</span></td>
                           <td>
                             {#if candidate.preferred}
                               <span class="badge badge-success">Preferred</span>
@@ -365,7 +398,7 @@
                             {/if}
                             <button
                               class="btn btn-ghost btn-sm"
-                              onclick={() => handleRemoveCandidate(candidate.id)}
+                              onclick={() => handleRemoveCandidate(candidate.id, candidate.preferred)}
                             >
                               Remove
                             </button>
@@ -437,64 +470,6 @@
                 {/if}
               </section>
 
-              <!-- Saved Supplier Offers Section -->
-              {#if rp.savedOffers.length > 0}
-                <section class="plan-section">
-                  <div class="subsection-header">
-                    <h4>Saved Supplier Offers</h4>
-                    <span class="subsection-note">Procurement snapshots saved for this requirement</span>
-                  </div>
-                  <table class="match-table supplier-table">
-                    <thead>
-                      <tr>
-                        <th>Provider</th>
-                        <th>MPN</th>
-                        <th>Manufacturer</th>
-                        <th>Package</th>
-                        <th>Stock</th>
-                        <th>MOQ</th>
-                        <th>Price</th>
-                        <th>Imported</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {#each rp.savedOffers as saved}
-                        <tr>
-                          <td><span class="provider-badge">{saved.provider}</span></td>
-                          <td class="mpn-cell">{saved.mpn || '—'}</td>
-                          <td>{saved.manufacturer || '—'}</td>
-                          <td>{saved.package || '—'}</td>
-                          <td class="qty-cell">{formatSupplierCount(saved.stock)}</td>
-                          <td class="qty-cell">{formatSupplierCount(saved.moq)}</td>
-                          <td>{formatSupplierPrice(saved)}</td>
-                          <td>
-                            {#if saved.linkedComponentId}
-                              <span class="badge badge-success">Yes</span>
-                            {:else}
-                              <span class="muted-cell">No</span>
-                            {/if}
-                          </td>
-                          <td class="action-cell">
-                            {#if saved.productUrl}
-                              <a class="supplier-link" href={saved.productUrl} target="_blank" rel="noreferrer">
-                                View
-                              </a>
-                            {/if}
-                            <button
-                              class="btn btn-ghost btn-sm"
-                              onclick={() => handleRemoveSavedOffer(saved.id)}
-                            >
-                              Remove
-                            </button>
-                          </td>
-                        </tr>
-                      {/each}
-                    </tbody>
-                  </table>
-                </section>
-              {/if}
-
               <!-- Supplier Options Section -->
               <section class="plan-section supplier-section">
                 <div class="subsection-header">
@@ -562,6 +537,7 @@
                       <tbody>
                         {#each sourcingResult.offers as offer}
                           {@const quality = supplierQualityBadge(offer)}
+                          {@const alreadyCandidate = isAlreadyCandidate(rp, offer)}
                           <tr>
                             <td><span class="provider-badge">{offer.provider}</span></td>
                             <td class="mpn-cell">{offer.mpn || '—'}</td>
@@ -580,24 +556,22 @@
                               </div>
                             </td>
                             <td class="action-cell">
-                              <button
-                                class="btn btn-primary btn-sm"
-                                onclick={() => handleImportOffer(rp.requirement.id, offer, sourcingResult.currency, true)}
-                              >
-                                Import + Prefer
-                              </button>
-                              <button
-                                class="btn btn-secondary btn-sm"
-                                onclick={() => handleImportOffer(rp.requirement.id, offer, sourcingResult.currency, false)}
-                              >
-                                Import
-                              </button>
-                              <button
-                                class="btn btn-ghost btn-sm"
-                                onclick={() => handleSaveOffer(rp.requirement.id, offer, sourcingResult.currency)}
-                              >
-                                Save Offer
-                              </button>
+                              {#if alreadyCandidate}
+                                <span class="badge">Candidate</span>
+                              {:else}
+                                <button
+                                  class="btn btn-primary btn-sm"
+                                  onclick={() => handleAddProviderCandidate(rp.requirement.id, offer, sourcingResult.currency, true)}
+                                >
+                                  Add + Set Preferred
+                                </button>
+                                <button
+                                  class="btn btn-secondary btn-sm"
+                                  onclick={() => handleAddProviderCandidate(rp.requirement.id, offer, sourcingResult.currency, false)}
+                                >
+                                  Add as Candidate
+                                </button>
+                              {/if}
                             </td>
                           </tr>
                         {/each}
@@ -872,6 +846,14 @@
     font-size: 10px;
     font-weight: 500;
     letter-spacing: 0.04em;
+  }
+  .origin-provider {
+    background: var(--color-warning-soft);
+    color: var(--color-warning-text);
+  }
+  .origin-imported_from_supplier {
+    background: var(--color-success-soft);
+    color: var(--color-success-text);
   }
   @media (max-width: 980px) {
     .resolution-grid {

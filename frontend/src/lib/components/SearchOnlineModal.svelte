@@ -9,6 +9,7 @@
     type AssetSearchCandidate,
     type Component,
   } from '../backend';
+  import { Browser } from '@wailsio/runtime';
 
   let { open = false, component = null, onclose, onimported }: {
     open?: boolean;
@@ -70,6 +71,12 @@
       searchError = e?.message ?? String(e);
     } finally {
       importingId = null;
+    }
+  }
+
+  function openUrl(url: string) {
+    if (url) {
+      Browser.OpenURL(url);
     }
   }
 
@@ -166,12 +173,10 @@
                     </div>
                     <div class="candidate-actions">
                       {#if candidate.sourceUrl}
-                        <a
+                        <button
                           class="btn btn-ghost btn-sm"
-                          href={candidate.sourceUrl}
-                          target="_blank"
-                          rel="noopener"
-                        >View</a>
+                          onclick={() => openUrl(candidate.sourceUrl || '')}
+                        >View</button>
                       {/if}
                       <button
                         class="btn btn-secondary btn-sm"

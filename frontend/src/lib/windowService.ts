@@ -22,6 +22,10 @@ export function pickDirectory(startDir = ''): Promise<string> {
   return call('PickDirectory', startDir);
 }
 
+export function pickAssetFile(): Promise<string> {
+  return call('PickAssetFile');
+}
+
 export function setLauncherView(view: 'launcher' | 'kicad-import'): Promise<void> {
   return call('SetLauncherView', view);
 }

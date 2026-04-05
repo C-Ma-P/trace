@@ -44,12 +44,16 @@ type ProjectRepository interface {
 	// Part candidates
 	AddPartCandidate(context.Context, ProjectPartCandidate) (ProjectPartCandidate, error)
 	SetPreferredCandidate(ctx context.Context, requirementID, candidateID string) error
+	ClearPreferredCandidate(ctx context.Context, requirementID string) error
+	GetPartCandidate(ctx context.Context, candidateID string) (ProjectPartCandidate, error)
 	RemovePartCandidate(context.Context, string) error
 	ListPartCandidates(ctx context.Context, requirementID string) ([]ProjectPartCandidate, error)
 	ListPartCandidatesByProject(ctx context.Context, projectID string) ([]ProjectPartCandidate, error)
+	UpdatePartCandidateComponent(ctx context.Context, candidateID string, componentID string, origin CandidateOrigin) error
 
 	// Saved supplier offers
 	SaveSupplierOffer(context.Context, SavedSupplierOffer) (SavedSupplierOffer, error)
+	GetSavedSupplierOffer(ctx context.Context, offerID string) (SavedSupplierOffer, error)
 	RemoveSavedSupplierOffer(context.Context, string) error
 	ListSavedSupplierOffers(ctx context.Context, requirementID string) ([]SavedSupplierOffer, error)
 	ListSavedSupplierOffersByProject(ctx context.Context, projectID string) ([]SavedSupplierOffer, error)

@@ -426,10 +426,10 @@ func (r *ProjectRepository) DeleteProject(ctx context.Context, id string) error 
 
 func (r *ProjectRepository) AddPartCandidate(ctx context.Context, candidate domain.ProjectPartCandidate) (domain.ProjectPartCandidate, error) {
 	if err := r.store.db.QueryRowxContext(ctx, `
-		insert into project_part_candidates(id, project_id, requirement_id, component_id, preferred, origin)
-		values ($1, $2, $3, $4, $5, $6)
+		insert into project_part_candidates(id, project_id, requirement_id, component_id, source_offer_id, preferred, origin)
+		values ($1, $2, $3, $4, $5, $6, $7)
 		returning created_at, updated_at
-	`, candidate.ID, candidate.ProjectID, candidate.RequirementID, candidate.ComponentID, candidate.Preferred, candidate.Origin,
+	`, candidate.ID, candidate.ProjectID, candidate.RequirementID, candidate.ComponentID, candidate.SourceOfferID, candidate.Preferred, candidate.Origin,
 	).Scan(&candidate.CreatedAt, &candidate.UpdatedAt); err != nil {
 		return domain.ProjectPartCandidate{}, err
 	}
@@ -485,10 +485,31 @@ func (r *ProjectRepository) RemovePartCandidate(ctx context.Context, candidateID
 	return nil
 }
 
+func (r *ProjectRepository) ClearPreferredCandidate(ctx context.Context, requirementID string) error {
+	_, err := r.store.db.ExecContext(ctx, `
+		update project_part_candidates
+		set preferred = false, updated_at = now()
+		where requirement_id = $1 and preferred = true
+	`, requirementID)
+	return err
+}
+
+func (r *ProjectRepository) GetPartCandidate(ctx context.Context, candidateID string) (domain.ProjectPartCandidate, error) {
+	var c domain.ProjectPartCandidate
+	if err := r.store.db.GetContext(ctx, &c, `
+		select id, project_id, requirement_id, component_id, source_offer_id, preferred, origin, created_at, updated_at
+		from project_part_candidates
+		where id = $1
+	`, candidateID); err != nil {
+		return domain.ProjectPartCandidate{}, domain.ErrNotFound{ID: candidateID}
+	}
+	return c, nil
+}
+
 func (r *ProjectRepository) ListPartCandidates(ctx context.Context, requirementID string) ([]domain.ProjectPartCandidate, error) {
 	var candidates []domain.ProjectPartCandidate
 	if err := r.store.db.SelectContext(ctx, &candidates, `
-		select id, project_id, requirement_id, component_id, preferred, origin, created_at, updated_at
+		select id, project_id, requirement_id, component_id, source_offer_id, preferred, origin, created_at, updated_at
 		from project_part_candidates
 		where requirement_id = $1
 		order by preferred desc, created_at
@@ -501,7 +522,7 @@ func (r *ProjectRepository) ListPartCandidates(ctx context.Context, requirementI
 func (r *ProjectRepository) ListPartCandidatesByProject(ctx context.Context, projectID string) ([]domain.ProjectPartCandidate, error) {
 	var candidates []domain.ProjectPartCandidate
 	if err := r.store.db.SelectContext(ctx, &candidates, `
-		select id, project_id, requirement_id, component_id, preferred, origin, created_at, updated_at
+		select id, project_id, requirement_id, component_id, source_offer_id, preferred, origin, created_at, updated_at
 		from project_part_candidates
 		where project_id = $1
 		order by requirement_id, preferred desc, created_at
@@ -588,6 +609,39 @@ func (r *ProjectRepository) LinkSupplierOfferToComponent(ctx context.Context, of
 	}
 	if n == 0 {
 		return domain.ErrNotFound{ID: offerID}
+	}
+	return nil
+}
+
+func (r *ProjectRepository) GetSavedSupplierOffer(ctx context.Context, offerID string) (domain.SavedSupplierOffer, error) {
+	var o domain.SavedSupplierOffer
+	if err := r.store.db.GetContext(ctx, &o, `
+		select id, project_id, requirement_id, provider, provider_part_id, product_url,
+			manufacturer, mpn, description, package, stock, moq, unit_price, currency,
+			linked_component_id, captured_at, created_at
+		from saved_supplier_offers
+		where id = $1
+	`, offerID); err != nil {
+		return domain.SavedSupplierOffer{}, domain.ErrNotFound{ID: offerID}
+	}
+	return o, nil
+}
+
+func (r *ProjectRepository) UpdatePartCandidateComponent(ctx context.Context, candidateID string, componentID string, origin domain.CandidateOrigin) error {
+	res, err := r.store.db.ExecContext(ctx, `
+		update project_part_candidates
+		set component_id = $1, origin = $2, updated_at = now()
+		where id = $3
+	`, componentID, origin, candidateID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return domain.ErrNotFound{ID: candidateID}
 	}
 	return nil
 }

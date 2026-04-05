@@ -32,6 +32,25 @@ func LauncherStatePath() (string, error) {
 	return filepath.Join(home, "launcher.json"), nil
 }
 
+func AssetsDir() (string, error) {
+	home, err := TraceHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, "assets"), nil
+}
+
+func EnsureAssetsDir() (string, error) {
+	dir, err := AssetsDir()
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", fmt.Errorf("create assets dir: %w", err)
+	}
+	return dir, nil
+}
+
 func EnsureTraceHome() (string, error) {
 	home, err := TraceHomeDir()
 	if err != nil {
