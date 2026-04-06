@@ -199,6 +199,12 @@ type RequirementPlanResponse struct {
 	Matches                []ComponentMatchResponse         `json:"matches"`
 	Candidates             []PartCandidateResponse          `json:"candidates"`
 	SavedOffers            []SavedSupplierOfferResponse     `json:"savedOffers"`
+	Readiness              RequirementReadinessResponse     `json:"readiness"`
+}
+
+type RequirementReadinessResponse struct {
+	Status   string   `json:"status"`
+	Blockers []string `json:"blockers"`
 }
 
 type ComponentMatchResponse struct {
@@ -400,6 +406,12 @@ type IngestedAssetResponse struct {
 	Label            string `json:"label"`
 	StoredPath       string `json:"storedPath"`
 	OriginalFilename string `json:"originalFilename"`
+}
+
+type ValidateAssetPathResponse struct {
+	Valid    bool   `json:"valid"`
+	Reason   string `json:"reason"`
+	PathKind string `json:"pathKind"`
 }
 
 type KiCadProjectCandidateResponse struct {

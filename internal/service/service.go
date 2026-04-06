@@ -804,6 +804,8 @@ func (s *Service) PlanProject(ctx context.Context, projectID string) (domain.Pro
 			offers = []domain.SavedSupplierOffer{}
 		}
 
+		readiness := s.computeExportReadiness(ctx, candidates)
+
 		plan.Requirements = append(plan.Requirements, domain.RequirementPlan{
 			Requirement:            requirement,
 			MatchingOnHandQuantity: matchingOnHand,
@@ -812,6 +814,7 @@ func (s *Service) PlanProject(ctx context.Context, projectID string) (domain.Pro
 			Matches:                matches,
 			Candidates:             candidates,
 			SavedOffers:            offers,
+			Readiness:              readiness,
 		})
 	}
 
@@ -953,6 +956,69 @@ func (s *Service) buildSelectedPart(ctx context.Context, requirement domain.Proj
 		OnHandQuantity:    onHandQuantity,
 		ShortfallQuantity: shortfallQuantity,
 	}, nil
+}
+
+// computeExportReadiness determines the KiCad export readiness of a requirement
+// based on its candidates and the preferred component's asset state.
+func (s *Service) computeExportReadiness(ctx context.Context, candidates []domain.ProjectPartCandidate) domain.RequirementReadiness {
+	var preferred *domain.ProjectPartCandidate
+	for i := range candidates {
+		if candidates[i].Preferred {
+			preferred = &candidates[i]
+			break
+		}
+	}
+
+	if preferred == nil {
+		return domain.RequirementReadiness{
+			Status:   domain.ReadinessMissingPreferred,
+			Blockers: []string{"No preferred component selected"},
+		}
+	}
+
+	if preferred.Origin == domain.CandidateOriginProvider {
+		return domain.RequirementReadiness{
+			Status:   domain.ReadinessProviderBacked,
+			Blockers: []string{"Preferred candidate is provider-backed — import into catalog first"},
+		}
+	}
+
+	if preferred.ComponentID == nil {
+		return domain.RequirementReadiness{
+			Status:   domain.ReadinessMissingPreferred,
+			Blockers: []string{"Preferred candidate has no linked component"},
+		}
+	}
+
+	// Check component's selected assets.
+	detail, err := s.assets.GetComponentWithAssets(ctx, *preferred.ComponentID)
+	if err != nil {
+		return domain.RequirementReadiness{
+			Status:   domain.ReadinessMissingPreferred,
+			Blockers: []string{"Cannot load component assets"},
+		}
+	}
+
+	var blockers []string
+	if detail.SelectedSymbolAsset == nil {
+		blockers = append(blockers, "Missing selected symbol")
+	}
+	if detail.SelectedFootprintAsset == nil {
+		blockers = append(blockers, "Missing selected footprint")
+	}
+
+	if len(blockers) > 0 {
+		status := domain.ReadinessMissingFootprint
+		if detail.SelectedSymbolAsset == nil {
+			status = domain.ReadinessMissingSymbol
+		}
+		return domain.RequirementReadiness{Status: status, Blockers: blockers}
+	}
+
+	return domain.RequirementReadiness{
+		Status:   domain.ReadinessReady,
+		Blockers: []string{},
+	}
 }
 
 func componentDefinitionLabel(component domain.Component) string {

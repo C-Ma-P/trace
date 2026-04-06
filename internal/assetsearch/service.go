@@ -3,8 +3,10 @@ package assetsearch
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"componentmanager/internal/domain"
+	"componentmanager/internal/ingest"
 )
 
 // Service orchestrates asset search and import across providers.
@@ -12,15 +14,22 @@ type Service struct {
 	registry   *Registry
 	components domain.ComponentRepository
 	assets     domain.ComponentAssetRepository
+	ingest     *ingest.Service
 }
 
 // NewService creates an asset search orchestration service.
-func NewService(registry *Registry, components domain.ComponentRepository, assets domain.ComponentAssetRepository) *Service {
-	return &Service{
+// The ingest service is used to process downloaded artifacts from providers
+// through the same pipeline as manual/local imports.
+func NewService(registry *Registry, components domain.ComponentRepository, assets domain.ComponentAssetRepository, ingestSvc ...*ingest.Service) *Service {
+	s := &Service{
 		registry:   registry,
 		components: components,
 		assets:     assets,
 	}
+	if len(ingestSvc) > 0 {
+		s.ingest = ingestSvc[0]
+	}
+	return s
 }
 
 // SearchForComponent queries all registered providers for asset candidates
@@ -67,7 +76,10 @@ func (s *Service) SearchForComponent(ctx context.Context, req SearchRequest) (Se
 }
 
 // ImportSearchResult imports a single provider candidate's assets into the
-// component's asset list. Assets land as candidates (not auto-selected).
+// component's asset list. When a provider returns downloaded artifacts, those
+// are fed through the ingestion pipeline so that assets land in Trace-managed
+// local storage. Legacy providers that return pre-built ImportedAssets are
+// still supported via direct persistence.
 func (s *Service) ImportSearchResult(ctx context.Context, req ImportRequest) (ImportResponse, error) {
 	if req.ComponentID == "" {
 		return ImportResponse{}, fmt.Errorf("component ID is required")
@@ -89,7 +101,35 @@ func (s *Service) ImportSearchResult(ctx context.Context, req ImportRequest) (Im
 		return ImportResponse{}, fmt.Errorf("provider %q import failed: %w", req.Provider, err)
 	}
 
-	// Persist each imported asset as a candidate on the component.
+	// Preferred path: provider returned downloaded artifacts — route through ingestion.
+	if len(result.Artifacts) > 0 && s.ingest != nil {
+		for _, artifact := range result.Artifacts {
+			ingestResult, err := s.ingest.Ingest(ctx, ingest.IngestRequest{
+				ComponentID: req.ComponentID,
+				FilePath:    artifact.FilePath,
+				SourceKind:  p.Name(),
+				SourceLabel: artifact.Description,
+			})
+			if err != nil {
+				result.Warnings = append(result.Warnings, fmt.Sprintf("ingestion failed for %s: %v", artifact.Description, err))
+				continue
+			}
+			// Convert ingested assets to ImportedAsset for the response.
+			for _, ia := range ingestResult.Assets {
+				result.ImportedAssets = append(result.ImportedAssets, ImportedAsset{
+					AssetType: ia.AssetType,
+					Label:     ia.Label,
+					URLOrPath: ia.StoredPath,
+				})
+			}
+			result.Warnings = append(result.Warnings, ingestResult.Warnings...)
+		}
+		log.Printf("[assetsearch] provider %q: %d artifacts ingested for component %s", p.Name(), len(result.ImportedAssets), req.ComponentID)
+		return result, nil
+	}
+
+	// Fallback: legacy direct-persist path for providers that only return
+	// ImportedAssets without downloaded artifacts (stubs, etc.).
 	for _, ia := range result.ImportedAssets {
 		assetType := domain.AssetType(ia.AssetType)
 		if !assetType.Valid() {

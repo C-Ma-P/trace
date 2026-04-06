@@ -124,7 +124,31 @@ func (w *WindowService) PickAssetFile() (string, error) {
 	if w.controller == nil {
 		return "", fmt.Errorf("window controller not available")
 	}
-	return w.controller.PickFile("Import Component Asset")
+	return w.controller.PickFile("Import Component Asset",
+		application.FileFilter{
+			DisplayName: "KiCad Assets (*.kicad_sym, *.kicad_mod, *.zip)",
+			Pattern:     "*.kicad_sym;*.kicad_mod;*.zip",
+		},
+		application.FileFilter{
+			DisplayName: "3D Models (*.step, *.stp, *.wrl)",
+			Pattern:     "*.step;*.stp;*.wrl",
+		},
+		application.FileFilter{
+			DisplayName: "Datasheets (*.pdf)",
+			Pattern:     "*.pdf",
+		},
+		application.FileFilter{
+			DisplayName: "All Files (*)",
+			Pattern:     "*",
+		},
+	)
+}
+
+func (w *WindowService) PickAssetDir() (string, error) {
+	if w.controller == nil {
+		return "", fmt.Errorf("window controller not available")
+	}
+	return w.controller.PickDirectory("")
 }
 
 func (w *WindowService) SetLauncherView(view string) error {
@@ -199,7 +223,6 @@ func initService(dsn string) (*service.Service, *assetsearch.Service, *ingest.Se
 	reg := assetsearch.NewRegistry()
 	reg.Register(&providers.SnapEDA{})
 	reg.Register(&providers.UltraLibrarian{})
-	assetSearchSvc := assetsearch.NewService(reg, compRepo, assetRepo)
 
 	assetsDir, err := paths.EnsureAssetsDir()
 	if err != nil {
@@ -207,6 +230,8 @@ func initService(dsn string) (*service.Service, *assetsearch.Service, *ingest.Se
 		return nil, nil, nil, nil, fmt.Errorf("ensure assets directory: %w", err)
 	}
 	ingestSvc := ingest.NewService(assetsDir, compRepo, assetRepo)
+
+	assetSearchSvc := assetsearch.NewService(reg, compRepo, assetRepo, ingestSvc)
 
 	startupLog("service construction complete")
 	return svc, assetSearchSvc, ingestSvc, db, nil

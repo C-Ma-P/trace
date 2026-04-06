@@ -172,8 +172,8 @@ func searchResponseToApp(r assetsearch.SearchResponse) AssetSearchResponse {
 		results[i] = AssetSearchProviderResult{
 			ProviderId:    pr.ProviderID,
 			ProviderLabel: pr.ProviderLabel,
-			Candidates: candidates,
-			Error:      pr.Error,
+			Candidates:    candidates,
+			Error:         pr.Error,
 		}
 	}
 	return AssetSearchResponse{ProviderResults: results}
@@ -195,6 +195,15 @@ func importResponseToApp(r assetsearch.ImportResponse) AssetImportResponse {
 	return AssetImportResponse{
 		ImportedAssets: assets,
 		Warnings:       warnings,
+	}
+}
+
+func (a *App) ValidateAssetPath(path string) ValidateAssetPathResponse {
+	v := ingest.ValidatePath(path)
+	return ValidateAssetPathResponse{
+		Valid:    v.Valid,
+		Reason:   v.Reason,
+		PathKind: string(v.PathKind),
 	}
 }
 

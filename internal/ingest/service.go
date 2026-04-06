@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -15,6 +16,11 @@ import (
 
 	"componentmanager/internal/domain"
 )
+
+// maxExtractedFileSize is the maximum allowed size for a single file extracted
+// from a zip archive. Files exceeding this limit are rejected (not silently
+// truncated) to avoid persisting corrupt assets.
+const maxExtractedFileSize = 256 << 20 // 256 MB
 
 // Service handles ingestion of files into Trace-managed component asset storage.
 // It is designed to be reusable by manual file import, provider downloads, and
@@ -37,10 +43,10 @@ func NewService(assetsDir string, components domain.ComponentRepository, assets 
 
 // IngestRequest describes what to ingest and for which component.
 type IngestRequest struct {
-	ComponentID    string
-	FilePath       string // path to a file, directory, or zip archive
-	SourceKind     string // e.g. "local", "snapeda", "ultralibrarian"
-	SourceLabel    string // optional human-readable provenance
+	ComponentID string
+	FilePath    string // path to a file, directory, or zip archive
+	SourceKind  string // e.g. "local", "snapeda", "ultralibrarian"
+	SourceLabel string // optional human-readable provenance
 }
 
 // IngestResult describes the outcome of an ingestion operation.
@@ -124,7 +130,7 @@ func (s *Service) ingestSingleFile(ctx context.Context, req IngestRequest) (Inge
 		return result, nil
 	}
 
-	ingested, err := s.copyAndPersist(ctx, req.ComponentID, req.FilePath, filename, assetType, req.SourceKind, req.SourceLabel)
+	ingested, err := s.copyAndPersist(ctx, req.ComponentID, req.FilePath, filename, assetType, req.SourceKind, req.SourceLabel, "")
 	if err != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("failed to ingest %s: %v", filename, err))
 		return result, nil
@@ -136,48 +142,72 @@ func (s *Service) ingestSingleFile(ctx context.Context, req IngestRequest) (Inge
 	return result, nil
 }
 
-// ingestDirectory walks a directory and ingests all supported files.
-// .pretty directories are handled specially: contained .kicad_mod files are ingested
-// as footprint assets with labels that include the library name.
+// ingestDirectory recursively walks a directory and ingests all supported files.
+// .pretty directories are handled specially as footprint library units: their
+// contained .kicad_mod files are ingested with library-qualified labels, and the
+// walker does not descend into them separately. Hidden directories (prefixed
+// with ".") that are not .pretty dirs are skipped.
 func (s *Service) ingestDirectory(ctx context.Context, req IngestRequest) (IngestResult, error) {
 	result := newResult()
-
-	entries, err := os.ReadDir(req.FilePath)
-	if err != nil {
-		return IngestResult{}, fmt.Errorf("read directory: %w", err)
-	}
 
 	// If this directory itself is a .pretty library, ingest its .kicad_mod files.
 	if isPrettyDir(req.FilePath) {
 		s.ingestPrettyDir(ctx, req, filepath.Base(req.FilePath), req.FilePath, &result)
+		logResult("directory", req.FilePath, req.ComponentID, result)
 		return result, nil
 	}
 
-	for _, entry := range entries {
-		entryPath := filepath.Join(req.FilePath, entry.Name())
-
-		if entry.IsDir() {
-			if isPrettyDir(entry.Name()) {
-				s.ingestPrettyDir(ctx, req, entry.Name(), entryPath, &result)
-			}
-			// Skip non-.pretty subdirectories (no recursive descent into random dirs).
-			continue
-		}
-
-		assetType := classifyFile(entry.Name())
-		if assetType == "" {
-			result.Unsupported = append(result.Unsupported, entry.Name())
-			continue
-		}
-
-		ingested, err := s.copyAndPersist(ctx, req.ComponentID, entryPath, entry.Name(), assetType, req.SourceKind, req.SourceLabel)
+	err := filepath.WalkDir(req.FilePath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("failed to ingest %s: %v", entry.Name(), err))
-			continue
+			result.Warnings = append(result.Warnings, fmt.Sprintf("cannot access %s: %v", path, err))
+			return nil
+		}
+
+		if d.IsDir() {
+			// Skip the root dir itself (we're already walking it).
+			if path == req.FilePath {
+				return nil
+			}
+			// Handle .pretty directories as footprint library units.
+			if isPrettyDir(d.Name()) {
+				s.ingestPrettyDir(ctx, req, d.Name(), path, &result)
+				return fs.SkipDir
+			}
+			// Skip hidden directories (e.g. __MACOSX, .git).
+			if strings.HasPrefix(d.Name(), ".") || strings.HasPrefix(d.Name(), "__") {
+				return fs.SkipDir
+			}
+			return nil
+		}
+
+		// Skip hidden files.
+		if strings.HasPrefix(d.Name(), ".") {
+			return nil
+		}
+
+		assetType := classifyFile(d.Name())
+		if assetType == "" {
+			rel, _ := filepath.Rel(req.FilePath, path)
+			if rel == "" {
+				rel = d.Name()
+			}
+			result.Unsupported = append(result.Unsupported, rel)
+			return nil
+		}
+
+		ingested, err := s.copyAndPersist(ctx, req.ComponentID, path, d.Name(), assetType, req.SourceKind, req.SourceLabel, "")
+		if err != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("failed to ingest %s: %v", d.Name(), err))
+			return nil
 		}
 
 		result.Assets = append(result.Assets, ingested)
 		result.CountByType[string(assetType)]++
+		return nil
+	})
+
+	if err != nil {
+		return IngestResult{}, fmt.Errorf("walk directory: %w", err)
 	}
 
 	logResult("directory", req.FilePath, req.ComponentID, result)
@@ -185,6 +215,7 @@ func (s *Service) ingestDirectory(ctx context.Context, req IngestRequest) (Inges
 }
 
 // ingestPrettyDir ingests .kicad_mod files from a .pretty footprint library directory.
+// Footprint assets are labelled as "LibraryName/FootprintName" for clarity.
 func (s *Service) ingestPrettyDir(ctx context.Context, req IngestRequest, libName string, dirPath string, result *IngestResult) {
 	entries, err := os.ReadDir(dirPath)
 	if err != nil {
@@ -204,19 +235,19 @@ func (s *Service) ingestPrettyDir(ctx context.Context, req IngestRequest, libNam
 		entryPath := filepath.Join(dirPath, entry.Name())
 		label := fmt.Sprintf("%s/%s", strings.TrimSuffix(libName, ".pretty"), strings.TrimSuffix(entry.Name(), ".kicad_mod"))
 
-		ingested, err := s.copyAndPersist(ctx, req.ComponentID, entryPath, entry.Name(), domain.AssetTypeFootprint, req.SourceKind, req.SourceLabel)
+		ingested, err := s.copyAndPersist(ctx, req.ComponentID, entryPath, entry.Name(), domain.AssetTypeFootprint, req.SourceKind, req.SourceLabel, label)
 		if err != nil {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("failed to ingest %s/%s: %v", libName, entry.Name(), err))
 			continue
 		}
-		ingested.Label = label
 		result.Assets = append(result.Assets, ingested)
 		result.CountByType["footprint"]++
 	}
 }
 
 // ingestZip safely extracts a zip archive to a temp directory and ingests all
-// supported files found inside.
+// supported files found inside. Per-entry extraction failures (e.g. oversized
+// files) are captured as warnings rather than failing the entire zip.
 func (s *Service) ingestZip(ctx context.Context, req IngestRequest) (IngestResult, error) {
 	result := newResult()
 
@@ -226,9 +257,11 @@ func (s *Service) ingestZip(ctx context.Context, req IngestRequest) (IngestResul
 	}
 	defer os.RemoveAll(tmpDir)
 
-	if err := extractZip(req.FilePath, tmpDir); err != nil {
+	extractWarnings, err := extractZip(req.FilePath, tmpDir)
+	if err != nil {
 		return IngestResult{}, fmt.Errorf("extract zip: %w", err)
 	}
+	result.Warnings = append(result.Warnings, extractWarnings...)
 
 	// Walk extracted contents and ingest.
 	dirReq := req
@@ -251,7 +284,9 @@ func (s *Service) ingestZip(ctx context.Context, req IngestRequest) (IngestResul
 }
 
 // copyAndPersist copies a file into managed storage and creates a ComponentAsset record.
-func (s *Service) copyAndPersist(ctx context.Context, componentID, srcPath, originalFilename string, assetType domain.AssetType, sourceKind, sourceLabel string) (IngestedAsset, error) {
+// If labelOverride is non-empty it is used as the asset label; otherwise the
+// label is derived from the original filename (extension stripped).
+func (s *Service) copyAndPersist(ctx context.Context, componentID, srcPath, originalFilename string, assetType domain.AssetType, sourceKind, sourceLabel, labelOverride string) (IngestedAsset, error) {
 	// Determine destination path.
 	destDir := filepath.Join(s.assetsDir, componentID, string(assetType))
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
@@ -276,7 +311,10 @@ func (s *Service) copyAndPersist(ctx context.Context, componentID, srcPath, orig
 	}
 	metaJSON, _ := json.Marshal(meta)
 
-	label := strings.TrimSuffix(originalFilename, filepath.Ext(originalFilename))
+	label := labelOverride
+	if label == "" {
+		label = strings.TrimSuffix(originalFilename, filepath.Ext(originalFilename))
+	}
 
 	asset := domain.ComponentAsset{
 		ID:           newID(),
@@ -306,47 +344,63 @@ func (s *Service) copyAndPersist(ctx context.Context, componentID, srcPath, orig
 }
 
 // extractZip safely extracts a zip archive into destDir.
-// It guards against zip-slip path traversal.
-func extractZip(zipPath, destDir string) error {
+// It guards against zip-slip path traversal and enforces a per-file size limit.
+// Per-entry failures (e.g. oversized files) are captured as warnings rather
+// than aborting the entire extraction — this allows partial success when a zip
+// contains a mix of good and bad entries.
+func extractZip(zipPath, destDir string) ([]string, error) {
 	r, err := zip.OpenReader(zipPath)
 	if err != nil {
-		return fmt.Errorf("open zip: %w", err)
+		return nil, fmt.Errorf("open zip: %w", err)
 	}
 	defer r.Close()
 
 	destDir, err = filepath.Abs(destDir)
 	if err != nil {
-		return err
+		return nil, err
 	}
+
+	var warnings []string
 
 	for _, f := range r.File {
 		// Guard against zip-slip.
 		target := filepath.Join(destDir, f.Name)
 		if !strings.HasPrefix(filepath.Clean(target), destDir+string(os.PathSeparator)) && filepath.Clean(target) != destDir {
-			return fmt.Errorf("zip entry %q escapes destination directory", f.Name)
+			return nil, fmt.Errorf("zip entry %q escapes destination directory", f.Name)
 		}
 
 		if f.FileInfo().IsDir() {
 			if err := os.MkdirAll(target, 0o755); err != nil {
-				return err
+				return nil, err
 			}
 			continue
 		}
 
 		// Ensure parent directory exists.
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			return err
+			return nil, err
 		}
 
 		if err := extractZipFile(f, target); err != nil {
-			return err
+			// Per-entry failure: warn and skip this file but continue.
+			warnings = append(warnings, fmt.Sprintf("skipped zip entry %q: %v", f.Name, err))
+			// Remove any partially-written file.
+			os.Remove(target)
+			continue
 		}
 	}
 
-	return nil
+	return warnings, nil
 }
 
 func extractZipFile(f *zip.File, target string) error {
+	// Reject files whose declared uncompressed size exceeds the limit.
+	// This is an early check; the actual byte count is verified below because
+	// the declared size can be spoofed in a malicious archive.
+	if f.UncompressedSize64 > maxExtractedFileSize {
+		return fmt.Errorf("declared size %d bytes exceeds limit of %d bytes", f.UncompressedSize64, maxExtractedFileSize)
+	}
+
 	rc, err := f.Open()
 	if err != nil {
 		return err
@@ -357,12 +411,24 @@ func extractZipFile(f *zip.File, target string) error {
 	if err != nil {
 		return err
 	}
-	defer out.Close()
 
-	// Limit extraction size to prevent zip bombs (256MB per file).
-	const maxSize = 256 << 20
-	_, err = io.Copy(out, io.LimitReader(rc, maxSize))
-	return err
+	// Copy up to maxExtractedFileSize+1 bytes.  If we end up with more than
+	// maxExtractedFileSize, the entry is oversized and we fail explicitly
+	// instead of silently truncating.
+	n, err := io.Copy(out, io.LimitReader(rc, maxExtractedFileSize+1))
+	if closeErr := out.Close(); closeErr != nil && err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		os.Remove(target)
+		return err
+	}
+	if n > maxExtractedFileSize {
+		os.Remove(target)
+		return fmt.Errorf("extracted size exceeds limit of %d bytes", maxExtractedFileSize)
+	}
+
+	return nil
 }
 
 func copyFile(src, dst string) error {

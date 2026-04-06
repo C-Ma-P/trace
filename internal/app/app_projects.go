@@ -389,6 +389,7 @@ func planToResponse(plan domain.ProjectPlan) ProjectPlanResponse {
 			Matches:                matches,
 			Candidates:             candidates,
 			SavedOffers:            savedOffers,
+			Readiness:              requirementReadinessToResponse(rp.Readiness),
 		}
 	}
 	return ProjectPlanResponse{
@@ -414,6 +415,17 @@ func requirementInputToDomain(input RequirementInput, constraints []domain.Requi
 	}
 	requirement.NormalizeResolution()
 	return requirement
+}
+
+func requirementReadinessToResponse(r domain.RequirementReadiness) RequirementReadinessResponse {
+	blockers := r.Blockers
+	if blockers == nil {
+		blockers = []string{}
+	}
+	return RequirementReadinessResponse{
+		Status:   string(r.Status),
+		Blockers: blockers,
+	}
 }
 
 func requirementResolutionToResponse(resolution *domain.RequirementResolution) *RequirementResolutionResponse {

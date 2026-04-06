@@ -12,6 +12,7 @@
     type CategoryInfo,
     type PartCandidate,
     type SavedSupplierOffer,
+    type ExportReadinessStatus,
   } from '../backend';
   import { Browser } from '@wailsio/runtime';
 
@@ -73,31 +74,36 @@
 
   interface ReadinessSummary {
     total: number;
-    withPreferred: number;
+    ready: number;
     missingPreferred: number;
     providerNotImported: number;
-    needsAttention: number;
+    missingSymbol: number;
+    missingFootprint: number;
   }
 
   function computeReadiness(rps: RequirementPlan[]): ReadinessSummary {
-    let total = 0, withPreferred = 0, missingPreferred = 0, providerNotImported = 0, needsAttention = 0;
+    let total = 0, ready = 0, missingPreferred = 0, providerNotImported = 0, missingSymbol = 0, missingFootprint = 0;
     for (const rp of rps) {
       total++;
-      const preferred = rp.candidates.find(c => c.preferred);
-      if (preferred) {
-        withPreferred++;
-      } else {
-        missingPreferred++;
-      }
-      if (rp.candidates.some(c => c.origin === 'provider')) {
-        providerNotImported++;
-      }
-      const status = reqStatus(rp);
-      if (status.level === 'warn' || status.level === 'danger') {
-        needsAttention++;
+      switch (rp.readiness.status as ExportReadinessStatus) {
+        case 'ready':
+          ready++;
+          break;
+        case 'missing_preferred':
+          missingPreferred++;
+          break;
+        case 'provider_not_imported':
+          providerNotImported++;
+          break;
+        case 'missing_symbol':
+          missingSymbol++;
+          break;
+        case 'missing_footprint':
+          missingFootprint++;
+          break;
       }
     }
-    return { total, withPreferred, missingPreferred, providerNotImported, needsAttention };
+    return { total, ready, missingPreferred, providerNotImported, missingSymbol, missingFootprint };
   }
 
   // ---- Per-requirement status ----
@@ -108,44 +114,12 @@
   }
 
   function reqStatus(rp: RequirementPlan): ReqStatus {
-    const warnings: string[] = [];
-    const preferred = rp.candidates.find(c => c.preferred);
-
-    if (!preferred) {
-      warnings.push('No preferred candidate selected');
+    const readiness = rp.readiness;
+    if (readiness.status === 'ready') {
+      return { level: 'ok', warnings: [] };
     }
-
-    if (preferred && preferred.origin === 'provider') {
-      warnings.push('Preferred candidate is provider-backed — import into catalog to finalize');
-    }
-
-    if (preferred && rp.selectedPart && rp.selectedPart.shortfallQuantity > 0) {
-      warnings.push(`Inventory shortfall of ${rp.selectedPart.shortfallQuantity}`);
-    }
-
-    // Check for stale source offers on provider-backed candidates
-    const staleThreshold = Date.now() - 30 * 24 * 60 * 60 * 1000;
-    const staleCandidates = rp.candidates.filter(c => c.sourceOffer && new Date(c.sourceOffer.capturedAt).getTime() < staleThreshold);
-    if (staleCandidates.length > 0) {
-      warnings.push(`${staleCandidates.length} candidate${staleCandidates.length === 1 ? '' : 's'} with stale supplier data (>30 days old)`);
-    }
-
-    // Out-of-stock source offers
-    const oosCandidates = rp.candidates.filter(c => c.sourceOffer && c.sourceOffer.stock !== null && c.sourceOffer.stock === 0);
-    if (oosCandidates.length > 0) {
-      warnings.push(`${oosCandidates.length} candidate${oosCandidates.length === 1 ? '' : 's'} with out-of-stock supplier data`);
-    }
-
-    if (rp.candidates.length === 0) {
-      warnings.push('No candidates — return to Plan tab to gather options');
-    }
-
-    let level: 'ok' | 'warn' | 'danger' = 'ok';
-    if (warnings.length > 0) {
-      level = preferred ? 'warn' : 'danger';
-    }
-
-    return { level, warnings };
+    const level = readiness.status === 'missing_preferred' ? 'danger' : 'warn';
+    return { level, warnings: readiness.blockers ?? [] };
   }
 
   // ---- Actions ----
@@ -304,8 +278,8 @@
           <span class="readiness-label">Requirements</span>
         </div>
         <div class="readiness-stat">
-          <span class="readiness-value readiness-ok">{readiness.withPreferred}</span>
-          <span class="readiness-label">Preferred selected</span>
+          <span class="readiness-value readiness-ok">{readiness.ready}</span>
+          <span class="readiness-label">Export ready</span>
         </div>
         <div class="readiness-stat">
           <span class="readiness-value {readiness.missingPreferred > 0 ? 'readiness-danger' : 'readiness-ok'}">{readiness.missingPreferred}</span>
@@ -316,8 +290,12 @@
           <span class="readiness-label">Provider (not imported)</span>
         </div>
         <div class="readiness-stat">
-          <span class="readiness-value {readiness.needsAttention > 0 ? 'readiness-warn' : 'readiness-ok'}">{readiness.needsAttention}</span>
-          <span class="readiness-label">Need attention</span>
+          <span class="readiness-value {readiness.missingSymbol > 0 ? 'readiness-warn' : 'readiness-ok'}">{readiness.missingSymbol}</span>
+          <span class="readiness-label">Missing symbol</span>
+        </div>
+        <div class="readiness-stat">
+          <span class="readiness-value {readiness.missingFootprint > 0 ? 'readiness-warn' : 'readiness-ok'}">{readiness.missingFootprint}</span>
+          <span class="readiness-label">Missing footprint</span>
         </div>
       </div>
 

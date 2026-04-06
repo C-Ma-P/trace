@@ -1,0 +1,64 @@
+# Go
+*.go.bak
+*.exe
+*.exe~
+*.dll
+*.so
+*.so.*
+*.dylib
+go.sum
+vendor/
+dist/
+
+# Wails
+/build/
+/bin/
+*.log
+
+# Frontend/Node
+node_modules/
+dist/
+*.env.local
+*.env.*.local
+
+# Frontend build artifacts
+frontend/wailsjs/
+
+# Vite
+.vite/
+*.timestamp*.mjs
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# Local development
+.env
+.env.local
+
+# Build outputs
+*.o
+*.a
+
+# MD5/hash files
+*.md5

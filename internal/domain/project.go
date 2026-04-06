@@ -129,6 +129,7 @@ type RequirementPlan struct {
 	Matches                []ComponentMatch
 	Candidates             []ProjectPartCandidate
 	SavedOffers            []SavedSupplierOffer
+	Readiness              RequirementReadiness
 }
 
 type ProjectPlan struct {
@@ -193,4 +194,25 @@ func derefString(value *string) string {
 		return ""
 	}
 	return *value
+}
+
+// ExportReadiness describes the KiCad-export readiness status of a single
+// requirement/component choice. Statuses are ordered from most-blocking to
+// least-blocking so that the UI can use the "worst" status directly.
+type ExportReadiness string
+
+const (
+	ReadinessReady            ExportReadiness = "ready"
+	ReadinessMissingPreferred ExportReadiness = "missing_preferred"
+	ReadinessProviderBacked   ExportReadiness = "provider_not_imported"
+	ReadinessMissingSymbol    ExportReadiness = "missing_symbol"
+	ReadinessMissingFootprint ExportReadiness = "missing_footprint"
+)
+
+// RequirementReadiness is the computed export-readiness state for a single
+// requirement plan entry. Status is the worst blocker; Blockers lists all
+// human-readable issues preventing readiness.
+type RequirementReadiness struct {
+	Status   ExportReadiness `json:"status"`
+	Blockers []string        `json:"blockers"`
 }

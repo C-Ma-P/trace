@@ -51,14 +51,30 @@ type ImportRequest struct {
 }
 
 // ImportResponse describes the assets that were imported.
+// Providers should populate Artifacts with paths to downloaded files/archives/
+// directories. The orchestrating service feeds those artifacts through the
+// ingestion pipeline so that assets end up in Trace-managed local storage.
+// ImportedAssets is kept for backward-compatibility with any provider that
+// cannot download artifacts locally (fully-stubbed providers fall here).
 type ImportResponse struct {
-	ImportedAssets []ImportedAsset `json:"importedAssets"`
-	Warnings       []string        `json:"warnings,omitempty"`
+	ImportedAssets []ImportedAsset      `json:"importedAssets"`
+	Artifacts      []DownloadedArtifact `json:"artifacts"`
+	Warnings       []string             `json:"warnings,omitempty"`
 }
 
 // ImportedAsset is a normalized description of one asset created during import.
+// Deprecated: new providers should return DownloadedArtifact entries instead,
+// allowing the ingestion pipeline to handle storage normalisation.
 type ImportedAsset struct {
 	AssetType string `json:"assetType"`
 	Label     string `json:"label"`
 	URLOrPath string `json:"urlOrPath"`
+}
+
+// DownloadedArtifact represents a file, archive, or directory that a provider
+// downloaded to a local temporary path. The ingestion service will classify,
+// store, and persist these as managed component assets.
+type DownloadedArtifact struct {
+	FilePath    string `json:"filePath"`    // local path to downloaded artifact
+	Description string `json:"description"` // human-readable description
 }

@@ -112,6 +112,19 @@ export interface RequirementPlan {
   matches: ComponentMatch[];
   candidates: PartCandidate[];
   savedOffers: SavedSupplierOffer[];
+  readiness: RequirementReadiness;
+}
+
+export type ExportReadinessStatus =
+  | 'ready'
+  | 'missing_preferred'
+  | 'provider_not_imported'
+  | 'missing_symbol'
+  | 'missing_footprint';
+
+export interface RequirementReadiness {
+  status: ExportReadinessStatus;
+  blockers: string[];
 }
 
 export interface RequirementSelectedPart {
@@ -211,7 +224,8 @@ export interface AssetSearchResponse {
 }
 
 export interface AssetSearchProviderResult {
-  provider: string;
+  providerId: string;
+  providerLabel: string;
   candidates: AssetSearchCandidate[];
   error: string;
 }
@@ -241,6 +255,27 @@ export interface AssetImportedAsset {
   assetType: string;
   label: string;
   urlOrPath: string;
+}
+
+export interface IngestResult {
+  assets: IngestedAsset[];
+  warnings: string[];
+  unsupported: string[];
+  countByType: Record<string, number>;
+}
+
+export interface IngestedAsset {
+  assetId: string;
+  assetType: string;
+  label: string;
+  storedPath: string;
+  originalFilename: string;
+}
+
+export interface ValidateAssetPathResult {
+  valid: boolean;
+  reason: string;
+  pathKind: 'file' | 'dir' | 'zip' | 'missing' | '';
 }
 
 export interface KiCadProjectCandidate {
@@ -720,6 +755,17 @@ export function importComponentAssetResult(
   externalId: string
 ): Promise<AssetImportResponse> {
   return call('ImportComponentAssetResult', componentId, provider, externalId);
+}
+
+export function ingestComponentAssets(
+  componentId: string,
+  filePath: string
+): Promise<IngestResult> {
+  return call('IngestComponentAssets', componentId, filePath);
+}
+
+export function validateAssetPath(path: string): Promise<ValidateAssetPathResult> {
+  return call('ValidateAssetPath', path);
 }
 
 export function emptyFilter(): ComponentFilter {

@@ -63,9 +63,9 @@
 
   async function handleImport(providerResult: AssetSearchProviderResult, candidate: AssetSearchCandidate) {
     if (!component) return;
-    importingId = `${providerResult.provider}:${candidate.externalId}`;
+    importingId = `${providerResult.providerId}:${candidate.externalId}`;
     try {
-      await importComponentAssetResult(component.id, providerResult.provider, candidate.externalId);
+      await importComponentAssetResult(component.id, providerResult.providerId, candidate.externalId);
       onimported?.();
     } catch (e: any) {
       searchError = e?.message ?? String(e);
@@ -139,7 +139,7 @@
 
         {#each results.providerResults as pr}
           <div class="provider-section">
-            <h4 class="provider-name">{pr.provider}</h4>
+            <h4 class="provider-name">{pr.providerLabel}</h4>
             {#if pr.error}
               <div class="provider-error">{pr.error}</div>
             {:else if !pr.candidates || pr.candidates.length === 0}
@@ -181,9 +181,9 @@
                       <button
                         class="btn btn-secondary btn-sm"
                         onclick={() => handleImport(pr, candidate)}
-                        disabled={importingId === `${pr.provider}:${candidate.externalId}`}
+                        disabled={importingId === `${pr.providerId}:${candidate.externalId}`}
                       >
-                        {importingId === `${pr.provider}:${candidate.externalId}` ? 'Importing…' : 'Import'}
+                        {importingId === `${pr.providerId}:${candidate.externalId}` ? 'Importing…' : 'Import'}
                       </button>
                     </div>
                   </div>

@@ -226,11 +226,14 @@ func (c *Controller) PickDirectory(startDir string) (string, error) {
 	return strings.TrimSpace(selectedDir), nil
 }
 
+// PickFile opens a file-selection dialog. On Linux GTK3 the chooser action is
+// GTK_FILE_CHOOSER_ACTION_OPEN, so only files are shown; directories are not
+// selectable. Use PickDirectory for directory selection.
 func (c *Controller) PickFile(title string, filters ...application.FileFilter) (string, error) {
 	dialog := c.app.Dialog.OpenFile().
 		SetTitle(title).
 		SetButtonText("Import").
-		CanChooseDirectories(true).
+		CanChooseDirectories(false).
 		CanChooseFiles(true)
 
 	for _, f := range filters {
