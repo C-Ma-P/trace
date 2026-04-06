@@ -178,6 +178,7 @@ type SupplierOfferResponse struct {
 	UnitPrice          *float64          `json:"unitPrice"`
 	ProductURL         string            `json:"productUrl"`
 	DatasheetURL       string            `json:"datasheetUrl"`
+	ImageURL           string            `json:"imageUrl"`
 	Lifecycle          string            `json:"lifecycle"`
 	MatchScore         int               `json:"matchScore"`
 	MatchReasons       []string          `json:"matchReasons"`
@@ -414,6 +415,25 @@ type ValidateAssetPathResponse struct {
 	PathKind string `json:"pathKind"`
 }
 
+type ReadAssetFileResponse struct {
+	Data     string `json:"data"`     // base64-encoded file contents
+	Filename string `json:"filename"` // basename of the file
+}
+
+type ImportEasyEDAInput struct {
+	ComponentID string `json:"componentId"`
+	LCSCID      string `json:"lcscId"`
+}
+
+type ImportEasyEDAResponse struct {
+	LCSCID            string   `json:"lcscId"`
+	SymbolImported    bool     `json:"symbolImported"`
+	FootprintImported bool     `json:"footprintImported"`
+	Model3DImported   bool     `json:"model3dImported"`
+	Warnings          []string `json:"warnings"`
+	Errors            []string `json:"errors"`
+}
+
 type KiCadProjectCandidateResponse struct {
 	Name        string `json:"name"`
 	ProjectPath string `json:"projectPath"`
@@ -490,6 +510,7 @@ type SaveSupplierOfferInput struct {
 	Provider       string   `json:"provider"`
 	ProviderPartID string   `json:"providerPartId"`
 	ProductURL     string   `json:"productUrl"`
+	ImageURL       string   `json:"imageUrl"`
 	Manufacturer   string   `json:"manufacturer"`
 	MPN            string   `json:"mpn"`
 	Description    string   `json:"description"`
@@ -505,6 +526,7 @@ type ImportSupplierOfferInput struct {
 	Provider       string   `json:"provider"`
 	ProviderPartID string   `json:"providerPartId"`
 	ProductURL     string   `json:"productUrl"`
+	ImageURL       string   `json:"imageUrl"`
 	Manufacturer   string   `json:"manufacturer"`
 	MPN            string   `json:"mpn"`
 	Description    string   `json:"description"`
@@ -523,6 +545,7 @@ type SavedSupplierOfferResponse struct {
 	Provider          string   `json:"provider"`
 	ProviderPartID    string   `json:"providerPartId"`
 	ProductURL        string   `json:"productUrl"`
+	ImageURL          string   `json:"imageUrl"`
 	Manufacturer      string   `json:"manufacturer"`
 	MPN               string   `json:"mpn"`
 	Description       string   `json:"description"`
@@ -546,6 +569,7 @@ type AddProviderCandidateInput struct {
 	Provider       string   `json:"provider"`
 	ProviderPartID string   `json:"providerPartId"`
 	ProductURL     string   `json:"productUrl"`
+	ImageURL       string   `json:"imageUrl"`
 	Manufacturer   string   `json:"manufacturer"`
 	MPN            string   `json:"mpn"`
 	Description    string   `json:"description"`

@@ -60,6 +60,14 @@ type ProjectRepository interface {
 	LinkSupplierOfferToComponent(ctx context.Context, offerID, componentID string) error
 }
 
+type InventoryBagRepository interface {
+	CreateBag(context.Context, InventoryBag) (InventoryBag, error)
+	GetBagByQRData(context.Context, string) (InventoryBag, error)
+	ListBagsByComponent(context.Context, string) ([]InventoryBag, error)
+	DeleteBag(context.Context, string) error
+	FindComponentImageURL(context.Context, string) string
+}
+
 type PreferenceRepository interface {
 	List(context.Context, string) (map[string]string, error)
 	SetMany(context.Context, map[string]string) error

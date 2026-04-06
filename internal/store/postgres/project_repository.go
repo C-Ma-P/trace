@@ -537,11 +537,11 @@ func (r *ProjectRepository) ListPartCandidatesByProject(ctx context.Context, pro
 func (r *ProjectRepository) SaveSupplierOffer(ctx context.Context, offer domain.SavedSupplierOffer) (domain.SavedSupplierOffer, error) {
 	if err := r.store.db.QueryRowxContext(ctx, `
 		insert into saved_supplier_offers(id, project_id, requirement_id, provider, provider_part_id, product_url,
-			manufacturer, mpn, description, package, stock, moq, unit_price, currency, linked_component_id, captured_at)
-		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+			image_url, manufacturer, mpn, description, package, stock, moq, unit_price, currency, linked_component_id, captured_at)
+		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 		returning created_at
 	`, offer.ID, offer.ProjectID, offer.RequirementID, offer.Provider, offer.ProviderPartID, offer.ProductURL,
-		offer.Manufacturer, offer.MPN, offer.Description, offer.Package, offer.Stock, offer.MOQ,
+		offer.ImageURL, offer.Manufacturer, offer.MPN, offer.Description, offer.Package, offer.Stock, offer.MOQ,
 		offer.UnitPrice, offer.Currency, offer.LinkedComponentID, offer.CapturedAt,
 	).Scan(&offer.CreatedAt); err != nil {
 		return domain.SavedSupplierOffer{}, err
@@ -568,7 +568,7 @@ func (r *ProjectRepository) ListSavedSupplierOffers(ctx context.Context, require
 	var offers []domain.SavedSupplierOffer
 	if err := r.store.db.SelectContext(ctx, &offers, `
 		select id, project_id, requirement_id, provider, provider_part_id, product_url,
-			manufacturer, mpn, description, package, stock, moq, unit_price, currency,
+			image_url, manufacturer, mpn, description, package, stock, moq, unit_price, currency,
 			linked_component_id, captured_at, created_at
 		from saved_supplier_offers
 		where requirement_id = $1
@@ -583,7 +583,7 @@ func (r *ProjectRepository) ListSavedSupplierOffersByProject(ctx context.Context
 	var offers []domain.SavedSupplierOffer
 	if err := r.store.db.SelectContext(ctx, &offers, `
 		select id, project_id, requirement_id, provider, provider_part_id, product_url,
-			manufacturer, mpn, description, package, stock, moq, unit_price, currency,
+			image_url, manufacturer, mpn, description, package, stock, moq, unit_price, currency,
 			linked_component_id, captured_at, created_at
 		from saved_supplier_offers
 		where project_id = $1
@@ -617,7 +617,7 @@ func (r *ProjectRepository) GetSavedSupplierOffer(ctx context.Context, offerID s
 	var o domain.SavedSupplierOffer
 	if err := r.store.db.GetContext(ctx, &o, `
 		select id, project_id, requirement_id, provider, provider_part_id, product_url,
-			manufacturer, mpn, description, package, stock, moq, unit_price, currency,
+			image_url, manufacturer, mpn, description, package, stock, moq, unit_price, currency,
 			linked_component_id, captured_at, created_at
 		from saved_supplier_offers
 		where id = $1

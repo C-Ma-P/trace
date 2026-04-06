@@ -23,6 +23,7 @@ type SupplierOffer struct {
 	UnitPrice          *float64          `json:"unitPrice"`
 	ProductURL         string            `json:"productUrl"`
 	DatasheetURL       string            `json:"datasheetUrl"`
+	ImageURL           string            `json:"imageUrl"`
 	Lifecycle          string            `json:"lifecycle"`
 	MatchScore         int               `json:"matchScore"`
 	MatchReasons       []string          `json:"matchReasons"`

@@ -8,6 +8,8 @@ import (
 	"componentmanager/internal/domain/registry"
 	"componentmanager/internal/ingest"
 	"componentmanager/internal/launcher"
+	"componentmanager/internal/phoneintake"
+	easyedaprovider "componentmanager/internal/providers/easyeda"
 	"componentmanager/internal/service"
 )
 
@@ -15,12 +17,15 @@ type App struct {
 	svc         *service.Service
 	assetSearch *assetsearch.Service
 	ingest      *ingest.Service
+	easyeda     *easyedaprovider.Service
 	launcher    *launcher.Store
+	intake      *phoneintake.Server
+	bagRepo     domain.InventoryBagRepository
 	initErr     string
 }
 
-func New(svc *service.Service, assetSearch *assetsearch.Service, ingestSvc *ingest.Service) *App {
-	return &App{svc: svc, assetSearch: assetSearch, ingest: ingestSvc, launcher: launcher.NewStore()}
+func New(svc *service.Service, assetSearch *assetsearch.Service, ingestSvc *ingest.Service, easyedaSvc *easyedaprovider.Service) *App {
+	return &App{svc: svc, assetSearch: assetSearch, ingest: ingestSvc, easyeda: easyedaSvc, launcher: launcher.NewStore()}
 }
 
 func NewFailed(errMsg string) *App {

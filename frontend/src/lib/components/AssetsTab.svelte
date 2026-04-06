@@ -1,11 +1,14 @@
 <script lang="ts">
   import AddFromFileModal from './AddFromFileModal.svelte';
+  import ImportEasyEDAModal from './ImportEasyEDAModal.svelte';
   import SearchOnlineModal from './SearchOnlineModal.svelte';
   import {
     selectComponentAsset,
     clearSelectedComponentAsset,
+    importEasyEDAAssets,
     type ComponentAsset,
     type Component,
+    type EasyEDAImportResult,
   } from '../backend';
 
   let { componentId, component, assets = [], selectedSymbolAsset = null, selectedFootprintAsset = null, selected3dModelAsset = null, selectedDatasheetAsset = null, onupdated }: {
@@ -100,7 +103,16 @@
   let busy = $state(false);
   let error = $state('');
   let showAddFromFile = $state(false);
+  let showImportEasyEDA = $state(false);
   let showSearchOnline = $state(false);
+
+  // LCSC direct-import state
+  let knownLcscId = $derived(
+    component.attributes.find((a) => a.key === 'lcsc_part')?.text ?? null
+  );
+  let easyedaBusy = $state(false);
+  let easyedaResult = $state<EasyEDAImportResult | null>(null);
+  let easyedaError = $state('');
 
   // --- Actions ---
 
@@ -138,6 +150,29 @@
   function handleSearchImported() {
     showSearchOnline = false;
     onupdated?.();
+  }
+
+  function handleEasyEDAImported() {
+    showImportEasyEDA = false;
+    onupdated?.();
+  }
+
+  async function handleDirectEasyEDAImport() {
+    if (easyedaBusy) return;
+    easyedaBusy = true;
+    easyedaResult = null;
+    easyedaError = '';
+    try {
+      const res = await importEasyEDAAssets(componentId, knownLcscId ?? '');
+      easyedaResult = res;
+      if (res.symbolImported || res.footprintImported || res.model3dImported) {
+        onupdated?.();
+      }
+    } catch (e: any) {
+      easyedaError = e?.message ?? String(e);
+    } finally {
+      easyedaBusy = false;
+    }
   }
 </script>
 
@@ -192,7 +227,53 @@
             <span class="acquire-btn-hint">KiCad bundles, library files, datasheets</span>
           </span>
         </button>
+        {#if knownLcscId}
+          <button
+            class="btn btn-secondary acquire-btn"
+            onclick={handleDirectEasyEDAImport}
+            disabled={easyedaBusy}
+          >
+            <span class="btn-icon">{easyedaBusy ? '…' : '⬇'}</span>
+            <span class="acquire-btn-content">
+              <span class="acquire-btn-label">{easyedaBusy ? 'Importing…' : 'Import from LCSC / EasyEDA'}</span>
+              <span class="acquire-btn-hint acquire-btn-hint--id">{knownLcscId}</span>
+            </span>
+          </button>
+        {:else}
+          <button class="btn btn-secondary acquire-btn" onclick={() => (showImportEasyEDA = true)}>
+            <span class="btn-icon">⬇</span>
+            <span class="acquire-btn-content">
+              <span class="acquire-btn-label">Import from LCSC / EasyEDA</span>
+              <span class="acquire-btn-hint">Fetch assets by LCSC part number</span>
+            </span>
+          </button>
+        {/if}
       </div>
+      {#if easyedaResult}
+        <div class="easyeda-inline-result" class:easyeda-result--ok={easyedaResult.symbolImported || easyedaResult.footprintImported || easyedaResult.model3dImported} class:easyeda-result--fail={!easyedaResult.symbolImported && !easyedaResult.footprintImported && !easyedaResult.model3dImported}>
+          <span class="easyeda-result-text">
+            {#if easyedaResult.symbolImported || easyedaResult.footprintImported || easyedaResult.model3dImported}
+              Imported
+              {[easyedaResult.symbolImported && 'symbol', easyedaResult.footprintImported && 'footprint', easyedaResult.model3dImported && '3D model'].filter(Boolean).join(', ')}
+              for {easyedaResult.lcscId}
+            {:else}
+              Import failed for {easyedaResult.lcscId}
+            {/if}
+          </span>
+          <button class="easyeda-result-dismiss" onclick={() => (easyedaResult = null)}>✕</button>
+        </div>
+      {/if}
+      {#if easyedaError}
+        <div class="easyeda-inline-result easyeda-result--fail">
+          <span class="easyeda-result-text">{easyedaError}</span>
+          <span class="easyeda-result-actions">
+            {#if !knownLcscId}
+              <button class="easyeda-result-link" onclick={() => { easyedaError = ''; showImportEasyEDA = true; }}>Enter ID manually</button>
+            {/if}
+            <button class="easyeda-result-dismiss" onclick={() => (easyedaError = '')}>✕</button>
+          </span>
+        </div>
+      {/if}
     </div>
   </section>
 
@@ -256,6 +337,13 @@
   {component}
   onimported={handleSearchImported}
   onclose={() => (showSearchOnline = false)}
+/>
+
+<ImportEasyEDAModal
+  open={showImportEasyEDA}
+  {componentId}
+  onimported={handleEasyEDAImported}
+  onclose={() => (showImportEasyEDA = false)}
 />
 
 <style>
@@ -374,6 +462,65 @@
     font-size: 11px;
     color: var(--color-text-secondary);
     font-weight: 400;
+  }
+  .acquire-btn-hint--id {
+    font-family: var(--font-mono, monospace);
+    font-size: 11px;
+    color: var(--color-accent);
+    font-weight: 500;
+  }
+
+  /* --- EasyEDA inline result --- */
+  .easyeda-inline-result {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 10px;
+    padding: 8px 12px;
+    border-radius: var(--radius-md, 6px);
+    font-size: 12px;
+  }
+  .easyeda-result--ok {
+    background: rgba(72, 187, 120, 0.12);
+    border: 1px solid rgba(72, 187, 120, 0.4);
+    color: #276749;
+  }
+  .easyeda-result--fail {
+    background: rgba(229, 62, 62, 0.08);
+    border: 1px solid rgba(229, 62, 62, 0.35);
+    color: var(--color-error, #c53030);
+  }
+  .easyeda-result-text {
+    flex: 1;
+    line-height: 1.4;
+  }
+  .easyeda-result-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .easyeda-result-link {
+    background: none;
+    border: none;
+    font-size: 11px;
+    cursor: pointer;
+    color: inherit;
+    text-decoration: underline;
+    padding: 0;
+  }
+  .easyeda-result-dismiss {
+    background: none;
+    border: none;
+    font-size: 13px;
+    cursor: pointer;
+    color: inherit;
+    opacity: 0.7;
+    padding: 0 2px;
+    flex-shrink: 0;
+  }
+  .easyeda-result-dismiss:hover {
+    opacity: 1;
   }
 
   /* --- Candidate Assets --- */

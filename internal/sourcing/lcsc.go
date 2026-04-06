@@ -90,6 +90,7 @@ func normalizeLCSCProduct(product lcsc.Product) SupplierOffer {
 		UnitPrice:          floatPointer(price),
 		ProductURL:         product.GetProductURL(),
 		DatasheetURL:       strings.TrimSpace(product.PdfURL),
+		ImageURL:           strings.TrimSpace(product.ProductImageURL),
 		Raw:                raw,
 	}
 }

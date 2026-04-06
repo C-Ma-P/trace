@@ -2,13 +2,19 @@ package app
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"componentmanager/internal/assetsearch"
 	"componentmanager/internal/domain"
+	"componentmanager/internal/domain/registry"
 	"componentmanager/internal/ingest"
+	easyedaprovider "componentmanager/internal/providers/easyeda"
 )
 
 func (a *App) CreateComponentAsset(req CreateComponentAssetInput) (ComponentAssetResponse, error) {
@@ -256,4 +262,96 @@ func ingestResultToResponse(r ingest.IngestResult) IngestComponentAssetsResponse
 		Unsupported: unsupported,
 		CountByType: countByType,
 	}
+}
+
+func (a *App) ImportEasyEDAAssets(input ImportEasyEDAInput) (ImportEasyEDAResponse, error) {
+	if err := a.checkReady(); err != nil {
+		return ImportEasyEDAResponse{}, err
+	}
+	if a.easyeda == nil {
+		return ImportEasyEDAResponse{}, fmt.Errorf("EasyEDA provider not available")
+	}
+
+	lcscID := input.LCSCID
+	if lcscID == "" {
+		comp, err := a.svc.GetComponent(context.Background(), input.ComponentID)
+		if err != nil {
+			return ImportEasyEDAResponse{}, fmt.Errorf("loading component: %w", err)
+		}
+		attr, ok := comp.GetAttribute(registry.AttrLCSCPart)
+		if !ok || attr.Text == nil || *attr.Text == "" {
+			return ImportEasyEDAResponse{}, fmt.Errorf("no LCSC part number stored on this component; add a %q attribute or provide an LCSC ID", registry.AttrLCSCPart)
+		}
+		lcscID = *attr.Text
+	}
+
+	result, err := a.easyeda.ImportComponentAssets(context.Background(), easyedaprovider.ImportRequest{
+		ComponentID: input.ComponentID,
+		LCSCID:      lcscID,
+	})
+	if err != nil {
+		return ImportEasyEDAResponse{}, err
+	}
+
+	warnings := result.Warnings
+	if warnings == nil {
+		warnings = []string{}
+	}
+	errors := result.Errors
+	if errors == nil {
+		errors = []string{}
+	}
+
+	return ImportEasyEDAResponse{
+		LCSCID:            result.LCSCID,
+		SymbolImported:    result.SymbolImported,
+		FootprintImported: result.FootprintImported,
+		Model3DImported:   result.Model3DImported,
+		Warnings:          warnings,
+		Errors:            errors,
+	}, nil
+}
+
+// ReadAssetFile reads the file contents of a component asset and returns them
+// as base64-encoded data. This is used by the frontend to load asset files
+// (e.g. STEP models) that live in managed storage.
+func (a *App) ReadAssetFile(assetID string) (ReadAssetFileResponse, error) {
+	if err := a.checkReady(); err != nil {
+		return ReadAssetFileResponse{}, err
+	}
+
+	asset, err := a.svc.GetComponentAsset(context.Background(), assetID)
+	if err != nil {
+		return ReadAssetFileResponse{}, fmt.Errorf("asset lookup: %w", err)
+	}
+
+	filePath := asset.URLOrPath
+	if filePath == "" {
+		return ReadAssetFileResponse{}, fmt.Errorf("asset has no file path")
+	}
+
+	// Security: ensure the path is within thr managed assets directory.
+	// Reject absolute paths that escape the expected storage root.
+	cleanPath := filepath.Clean(filePath)
+	if !filepath.IsAbs(cleanPath) {
+		return ReadAssetFileResponse{}, fmt.Errorf("asset path is not absolute")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ReadAssetFileResponse{}, fmt.Errorf("resolve home dir: %w", err)
+	}
+	assetsRoot := filepath.Join(home, ".trace", "assets")
+	if !strings.HasPrefix(cleanPath, assetsRoot+string(filepath.Separator)) {
+		return ReadAssetFileResponse{}, fmt.Errorf("asset path is outside managed storage")
+	}
+
+	data, err := os.ReadFile(cleanPath)
+	if err != nil {
+		return ReadAssetFileResponse{}, fmt.Errorf("read asset file: %w", err)
+	}
+
+	return ReadAssetFileResponse{
+		Data:     base64.StdEncoding.EncodeToString(data),
+		Filename: filepath.Base(cleanPath),
+	}, nil
 }

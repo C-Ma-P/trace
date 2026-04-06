@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ComponentAsset } from '../backend';
+  import ModelPreview from './ModelPreview.svelte';
 
   let { selectedSymbolAsset = null, selectedFootprintAsset = null, selected3dModelAsset = null }: {
     selectedSymbolAsset?: ComponentAsset | null;
@@ -22,11 +23,16 @@
   let activeKey = $state('symbol');
 
   let activeSlot = $derived(slots.find((s) => s.key === activeKey) ?? slots[0]);
+
+  /** Whether the active slot should use the interactive 3D viewer. */
+  let show3dViewer = $derived(activeSlot.key === '3d_model' && activeSlot.asset != null);
 </script>
 
 <div class="preview-panel">
-  <div class="preview-main">
-    {#if activeSlot.asset && activeSlot.asset.previewUrl}
+  <div class="preview-main" class:preview-3d={show3dViewer}>
+    {#if show3dViewer}
+      <ModelPreview asset={activeSlot.asset!} />
+    {:else if activeSlot.asset && activeSlot.asset.previewUrl}
       <img
         class="preview-image"
         src={activeSlot.asset.previewUrl}
@@ -104,6 +110,10 @@
     max-height: 280px;
     padding: 20px;
     background: var(--color-bg-muted);
+  }
+  .preview-main.preview-3d {
+    padding: 0;
+    height: 280px;
   }
   .preview-image {
     max-width: 100%;

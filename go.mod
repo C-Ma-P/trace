@@ -1,23 +1,27 @@
 module componentmanager
 
-go 1.25.0
+go 1.26.1
 
 require (
+	github.com/C-Ma-P/go-easyeda v0.0.0
+	github.com/PatrickWalther/go-digikey v1.1.0
+	github.com/PatrickWalther/go-lcsc v1.0.0
+	github.com/PatrickWalther/go-mouser v1.1.0
 	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6
 	github.com/jackc/pgx/v5 v5.9.1
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/pressly/goose/v3 v3.27.0
 	github.com/wailsapp/wails/v3 v3.0.0-alpha.74
+	github.com/zalando/go-keyring v0.2.8
 )
 
 replace github.com/wailsapp/wails/v3 => /home/meet/dev/wails-patch
 
+replace github.com/C-Ma-P/go-easyeda => /home/meet/dev/go-easyeda
+
 require (
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
-	github.com/PatrickWalther/go-digikey v1.1.0 // indirect
-	github.com/PatrickWalther/go-lcsc v1.0.0 // indirect
-	github.com/PatrickWalther/go-mouser v1.1.0 // indirect
 	github.com/ProtonMail/go-crypto v1.3.0 // indirect
 	github.com/adrg/xdg v0.5.3 // indirect
 	github.com/bep/debounce v1.2.1 // indirect
@@ -56,7 +60,6 @@ require (
 	github.com/skeema/knownhosts v1.3.2 // indirect
 	github.com/wailsapp/go-webview2 v1.0.23 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
-	github.com/zalando/go-keyring v0.2.8 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.48.0 // indirect
 	golang.org/x/net v0.50.0 // indirect

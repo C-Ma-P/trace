@@ -1,4 +1,6 @@
 <script lang="ts">
+  import PhoneIntakePanel from './components/PhoneIntakePanel.svelte';
+
   let { currentSection = $bindable() }: {
     currentSection: 'home' | 'components';
   } = $props();
@@ -35,6 +37,10 @@
       {#if !collapsed}<span class="nav-label">Components</span>{/if}
     </button>
   </nav>
+
+  {#if !collapsed}
+    <PhoneIntakePanel />
+  {/if}
 
   <div class="sidebar-footer">
     <button

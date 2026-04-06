@@ -139,6 +139,7 @@ func normalizeMouserPart(part mouser.Part) SupplierOffer {
 		UnitPrice:          floatPointer(price),
 		ProductURL:         strings.TrimSpace(part.ProductDetailUrl),
 		DatasheetURL:       strings.TrimSpace(part.DataSheetUrl),
+		ImageURL:           strings.TrimSpace(part.ImagePath),
 		Lifecycle:          strings.TrimSpace(part.LifecycleStatus),
 		Raw:                raw,
 	}

@@ -353,6 +353,9 @@
                 </div>
                 {#if preferred}
                   <div class="preferred-card">
+                    {#if preferred.sourceOffer?.imageUrl}
+                      <img src={preferred.sourceOffer.imageUrl} alt="" class="offer-thumb-lg" />
+                    {/if}
                     <div class="preferred-grid">
                       <div class="preferred-field">
                         <span class="field-label">MPN</span>
@@ -749,6 +752,13 @@
     border: 1px solid var(--color-success-border);
     border-radius: var(--radius-md);
     background: var(--color-success-soft);
+  }
+  .offer-thumb-lg {
+    width: 48px;
+    height: 48px;
+    object-fit: contain;
+    border-radius: 4px;
+    flex-shrink: 0;
   }
   .preferred-grid {
     display: grid;

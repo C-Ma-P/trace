@@ -176,6 +176,7 @@ type SavedSupplierOffer struct {
 	Provider          string    `db:"provider"`
 	ProviderPartID    string    `db:"provider_part_id"`
 	ProductURL        string    `db:"product_url"`
+	ImageURL          string    `db:"image_url"`
 	Manufacturer      string    `db:"manufacturer"`
 	MPN               string    `db:"mpn"`
 	Description       string    `db:"description"`

@@ -352,6 +352,9 @@ func (c *Controller) OpenProjectWindow(projectID string, hideLauncher bool) erro
 		c.mu.Unlock()
 
 		if !hasProjects {
+			// Stop the intake server — don't leave it running with only the launcher visible.
+			c.backend.StopIntakeIfRunning()
+
 			if launcher == nil {
 				launcher = c.EnsureLauncherWindow()
 			}

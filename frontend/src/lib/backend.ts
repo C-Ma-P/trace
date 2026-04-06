@@ -147,6 +147,7 @@ export interface SupplierOffer {
   unitPrice: number | null;
   productUrl: string;
   datasheetUrl: string;
+  imageUrl: string;
   lifecycle: string;
   matchScore: number;
   matchReasons: string[];
@@ -187,6 +188,7 @@ export interface SavedSupplierOffer {
   provider: string;
   providerPartId: string;
   productUrl: string;
+  imageUrl: string;
   manufacturer: string;
   mpn: string;
   description: string;
@@ -262,6 +264,15 @@ export interface IngestResult {
   warnings: string[];
   unsupported: string[];
   countByType: Record<string, number>;
+}
+
+export interface EasyEDAImportResult {
+  lcscId: string;
+  symbolImported: boolean;
+  footprintImported: boolean;
+  model3dImported: boolean;
+  warnings: string[];
+  errors: string[];
 }
 
 export interface IngestedAsset {
@@ -650,6 +661,7 @@ export function saveSupplierOffer(input: {
   provider: string;
   providerPartId: string;
   productUrl: string;
+  imageUrl: string;
   manufacturer: string;
   mpn: string;
   description: string;
@@ -667,6 +679,7 @@ export function importSupplierOffer(input: {
   provider: string;
   providerPartId: string;
   productUrl: string;
+  imageUrl: string;
   manufacturer: string;
   mpn: string;
   description: string;
@@ -689,6 +702,7 @@ export function addProviderCandidate(input: {
   provider: string;
   providerPartId: string;
   productUrl: string;
+  imageUrl: string;
   manufacturer: string;
   mpn: string;
   description: string;
@@ -764,8 +778,24 @@ export function ingestComponentAssets(
   return call('IngestComponentAssets', componentId, filePath);
 }
 
+export function importEasyEDAAssets(
+  componentId: string,
+  lcscId: string
+): Promise<EasyEDAImportResult> {
+  return call('ImportEasyEDAAssets', { componentId, lcscId });
+}
+
 export function validateAssetPath(path: string): Promise<ValidateAssetPathResult> {
   return call('ValidateAssetPath', path);
+}
+
+export interface ReadAssetFileResult {
+  data: string;     // base64-encoded file contents
+  filename: string;
+}
+
+export function readAssetFile(assetId: string): Promise<ReadAssetFileResult> {
+  return call('ReadAssetFile', assetId);
 }
 
 export function emptyFilter(): ComponentFilter {
@@ -787,4 +817,58 @@ export function categoryDisplayName(
   value: string
 ): string {
   return categories.find((c) => c.value === value)?.displayName ?? value;
+}
+
+// ---------- Phone Intake ----------
+
+export interface PhoneIntakeInfo {
+  available: boolean;
+  active: boolean;
+  url: string;
+  port: number;
+  recent: IntakeEvent[];
+}
+
+export interface IntakeEvent {
+  timestamp: string;
+  qrData: string;
+  componentId: string;
+  displayName: string;
+  action: 'lookup' | 'submit';
+  newQuantity: number | null;
+  success: boolean;
+  error: string;
+}
+
+export interface InventoryBag {
+  id: string;
+  label: string;
+  qrData: string;
+  componentId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function getPhoneIntakeInfo(): Promise<PhoneIntakeInfo> {
+  return call('GetPhoneIntakeInfo');
+}
+
+export function setPhoneIntakeEnabled(enabled: boolean): Promise<void> {
+  return call('SetPhoneIntakeEnabled', enabled);
+}
+
+export function createInventoryBag(input: {
+  componentId: string;
+  label: string;
+  qrData: string;
+}): Promise<InventoryBag> {
+  return call('CreateInventoryBag', input);
+}
+
+export function listComponentBags(componentId: string): Promise<InventoryBag[]> {
+  return call('ListComponentBags', componentId);
+}
+
+export function deleteInventoryBag(id: string): Promise<void> {
+  return call('DeleteInventoryBag', id);
 }

@@ -21,6 +21,8 @@ import (
 	"componentmanager/internal/kicad"
 	"componentmanager/internal/kicadconfig"
 	"componentmanager/internal/paths"
+	"componentmanager/internal/phoneintake"
+	easyedaprovider "componentmanager/internal/providers/easyeda"
 	"componentmanager/internal/secretstore"
 	"componentmanager/internal/service"
 	"componentmanager/internal/store/postgres"
@@ -46,12 +48,27 @@ func main() {
 	}
 
 	var backendApp *app.App
-	svc, assetSearchSvc, ingestSvc, db, initErr := initService(dsn)
+	svc, assetSearchSvc, ingestSvc, easyedaSvc, db, initErr := initService(dsn)
 	if initErr != nil {
 		backendApp = app.NewFailed(initErr.Error())
 	} else {
 		defer db.Close()
-		backendApp = app.New(svc, assetSearchSvc, ingestSvc)
+		backendApp = app.New(svc, assetSearchSvc, ingestSvc, easyedaSvc)
+
+		// Phone intake server
+		store := postgres.New(db)
+		compRepo := postgres.NewComponentRepository(store)
+		bagRepo := postgres.NewBagRepository(store)
+		intakePort := 8741
+		if p := os.Getenv("TRACE_INTAKE_PORT"); p != "" {
+			if parsed, err := strconv.Atoi(p); err == nil {
+				intakePort = parsed
+			}
+		}
+		intakeServer := phoneintake.NewServer(svc, compRepo, bagRepo, intakePort)
+		backendApp.SetIntakeServer(intakeServer)
+		backendApp.SetBagRepo(bagRepo)
+		defer intakeServer.Stop()
 	}
 	startupLog("app constructed")
 
@@ -158,13 +175,13 @@ func (w *WindowService) SetLauncherView(view string) error {
 	return w.controller.SetLauncherView(view)
 }
 
-func initService(dsn string) (*service.Service, *assetsearch.Service, *ingest.Service, *sqlx.DB, error) {
+func initService(dsn string) (*service.Service, *assetsearch.Service, *ingest.Service, *easyedaprovider.Service, *sqlx.DB, error) {
 	ctx := context.Background()
 
 	startupLog("before DB connect")
 	db, err := sqlx.Connect("pgx", dsn)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("cannot connect to PostgreSQL (%s): %w", dsn, err)
+		return nil, nil, nil, nil, nil, fmt.Errorf("cannot connect to PostgreSQL (%s): %w", dsn, err)
 	}
 	startupLog("after DB connect")
 
@@ -172,7 +189,7 @@ func initService(dsn string) (*service.Service, *assetsearch.Service, *ingest.Se
 	startupLog("before migrations")
 	if err := store.Migrate(ctx); err != nil {
 		db.Close()
-		return nil, nil, nil, nil, fmt.Errorf("database migration failed: %w", err)
+		return nil, nil, nil, nil, nil, fmt.Errorf("database migration failed: %w", err)
 	}
 	startupLog("after migrations")
 
@@ -195,7 +212,7 @@ func initService(dsn string) (*service.Service, *assetsearch.Service, *ingest.Se
 	prefs, err := prefRepo.List(ctx, "system.canonical_registry_version")
 	if err != nil {
 		db.Close()
-		return nil, nil, nil, nil, fmt.Errorf("reading canonical registry version failed: %w", err)
+		return nil, nil, nil, nil, nil, fmt.Errorf("reading canonical registry version failed: %w", err)
 	}
 	storedVersion := prefs["system.canonical_registry_version"]
 
@@ -209,13 +226,13 @@ func initService(dsn string) (*service.Service, *assetsearch.Service, *ingest.Se
 		}
 		if err := svc.SyncCanonicalAttributeDefinitions(ctx); err != nil {
 			db.Close()
-			return nil, nil, nil, nil, fmt.Errorf("attribute definition sync failed: %w", err)
+			return nil, nil, nil, nil, nil, fmt.Errorf("attribute definition sync failed: %w", err)
 		}
 		if err := prefRepo.SetMany(ctx, map[string]string{
 			"system.canonical_registry_version": wantVersion,
 		}); err != nil {
 			db.Close()
-			return nil, nil, nil, nil, fmt.Errorf("storing canonical registry version failed: %w", err)
+			return nil, nil, nil, nil, nil, fmt.Errorf("storing canonical registry version failed: %w", err)
 		}
 		startupLog("canonical attribute sync complete (stored v" + wantVersion + ")")
 	}
@@ -227,12 +244,14 @@ func initService(dsn string) (*service.Service, *assetsearch.Service, *ingest.Se
 	assetsDir, err := paths.EnsureAssetsDir()
 	if err != nil {
 		db.Close()
-		return nil, nil, nil, nil, fmt.Errorf("ensure assets directory: %w", err)
+		return nil, nil, nil, nil, nil, fmt.Errorf("ensure assets directory: %w", err)
 	}
 	ingestSvc := ingest.NewService(assetsDir, compRepo, assetRepo)
 
 	assetSearchSvc := assetsearch.NewService(reg, compRepo, assetRepo, ingestSvc)
 
+	easyedaSvc := easyedaprovider.NewService(ingestSvc)
+
 	startupLog("service construction complete")
-	return svc, assetSearchSvc, ingestSvc, db, nil
+	return svc, assetSearchSvc, ingestSvc, easyedaSvc, db, nil
 }

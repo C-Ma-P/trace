@@ -166,6 +166,7 @@
         provider: offer.provider,
         providerPartId: offer.supplierPartNumber,
         productUrl: offer.productUrl,
+        imageUrl: offer.imageUrl,
         manufacturer: offer.manufacturer,
         mpn: offer.mpn,
         description: offer.description,
@@ -522,6 +523,7 @@
                     <table class="match-table supplier-table">
                       <thead>
                         <tr>
+                          <th></th>
                           <th>Provider</th>
                           <th>MPN</th>
                           <th>Manufacturer</th>
@@ -539,6 +541,7 @@
                           {@const quality = supplierQualityBadge(offer)}
                           {@const alreadyCandidate = isAlreadyCandidate(rp, offer)}
                           <tr>
+                            <td class="img-cell">{#if offer.imageUrl}<img src={offer.imageUrl} alt="" class="offer-thumb" />{/if}</td>
                             <td><span class="provider-badge">{offer.provider}</span></td>
                             <td class="mpn-cell">{offer.mpn || '—'}</td>
                             <td>{offer.manufacturer || '—'}</td>
@@ -549,10 +552,12 @@
                             <td>{formatSupplierPrice(offer)}</td>
                             <td>
                               <div class="supplier-match-cell">
-                                <span class={`badge ${quality.class}`}>{quality.text}</span>
-                                {#if offer.matchReasons.length > 0}
-                                  <div class="supplier-reasons">{offer.matchReasons.join(' • ')}</div>
-                                {/if}
+                                <span
+                                  class={`badge ${quality.class}`}
+                                  title={offer.matchReasons.length > 0 ? offer.matchReasons.join(' • ') : undefined}
+                                >
+                                  {quality.text}
+                                </span>
                               </div>
                             </td>
                             <td class="action-cell">
@@ -771,6 +776,29 @@
     font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
+  }
+  .offer-thumb {
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+    border-radius: 3px;
+    vertical-align: middle;
+    transition: transform 160ms ease, box-shadow 160ms ease;
+    cursor: pointer;
+    transform-origin: left center;
+  }
+  .offer-thumb:hover {
+    transform: scale(4);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
+    position: relative;
+    z-index: 999;
+  }
+  .img-cell {
+    width: 32px;
+    padding: 4px !important;
+    text-align: center;
+    overflow: visible;
+    position: relative;
   }
   .match-table {
     width: 100%;
