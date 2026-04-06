@@ -49,7 +49,7 @@
   });
 
   const isPathInvalid = $derived(
-    filePath.trim() !== '' && pathValidation !== null && !pathValidation.valid
+    filePath.trim() !== '' && pathValidation?.valid === false
   );
 
   const canImport = $derived(
