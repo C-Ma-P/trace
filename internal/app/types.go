@@ -433,6 +433,9 @@ type ImportEasyEDAResponse struct {
 	SymbolImported    bool     `json:"symbolImported"`
 	FootprintImported bool     `json:"footprintImported"`
 	Model3DImported   bool     `json:"model3dImported"`
+	SymbolAssetID     string   `json:"symbolAssetId,omitempty"`
+	FootprintAssetID  string   `json:"footprintAssetId,omitempty"`
+	Model3DAssetID    string   `json:"model3dAssetId,omitempty"`
 	Warnings          []string `json:"warnings"`
 	Errors            []string `json:"errors"`
 }

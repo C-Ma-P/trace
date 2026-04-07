@@ -162,6 +162,11 @@ export interface SupplierProviderStatus {
   offerCount: number;
 }
 
+export interface SourcingProviderInfo {
+  name: string;
+  enabled: boolean;
+}
+
 export interface ComponentMatch {
   component: Component;
   onHandQuantity: number;
@@ -272,6 +277,9 @@ export interface EasyEDAImportResult {
   symbolImported: boolean;
   footprintImported: boolean;
   model3dImported: boolean;
+  symbolAssetId?: string;
+  footprintAssetId?: string;
+  model3dAssetId?: string;
   warnings: string[];
   errors: string[];
 }
@@ -612,6 +620,14 @@ export function planProject(projectId: string): Promise<ProjectPlan> {
 
 export function sourceRequirement(requirementId: string): Promise<SourceRequirementResult> {
   return call('SourceRequirement', requirementId);
+}
+
+export function sourceRequirementFromProvider(requirementId: string, providerName: string): Promise<SourceRequirementResult> {
+  return call('SourceRequirementFromProvider', requirementId, providerName);
+}
+
+export function getSourcingProviders(): Promise<SourcingProviderInfo[]> {
+  return call('GetSourcingProviders');
 }
 
 export function selectComponentForRequirement(

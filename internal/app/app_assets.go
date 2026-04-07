@@ -310,6 +310,25 @@ func (a *App) ImportEasyEDAAssets(input ImportEasyEDAInput) (ImportEasyEDARespon
 		return ImportEasyEDAResponse{}, err
 	}
 
+	// Auto-select each newly imported asset so the component immediately shows
+	// the symbol, footprint, and 3D model without requiring a manual selection.
+	ctx := context.Background()
+	if result.SymbolAssetID != "" {
+		if selErr := a.svc.SetSelectedComponentAsset(ctx, input.ComponentID, domain.AssetTypeSymbol, result.SymbolAssetID); selErr != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("auto-select symbol: %v", selErr))
+		}
+	}
+	if result.FootprintAssetID != "" {
+		if selErr := a.svc.SetSelectedComponentAsset(ctx, input.ComponentID, domain.AssetTypeFootprint, result.FootprintAssetID); selErr != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("auto-select footprint: %v", selErr))
+		}
+	}
+	if result.Model3DAssetID != "" {
+		if selErr := a.svc.SetSelectedComponentAsset(ctx, input.ComponentID, domain.AssetType3DModel, result.Model3DAssetID); selErr != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("auto-select 3d model: %v", selErr))
+		}
+	}
+
 	warnings := result.Warnings
 	if warnings == nil {
 		warnings = []string{}
@@ -324,6 +343,9 @@ func (a *App) ImportEasyEDAAssets(input ImportEasyEDAInput) (ImportEasyEDARespon
 		SymbolImported:    result.SymbolImported,
 		FootprintImported: result.FootprintImported,
 		Model3DImported:   result.Model3DImported,
+		SymbolAssetID:     result.SymbolAssetID,
+		FootprintAssetID:  result.FootprintAssetID,
+		Model3DAssetID:    result.Model3DAssetID,
 		Warnings:          warnings,
 		Errors:            errors,
 	}, nil

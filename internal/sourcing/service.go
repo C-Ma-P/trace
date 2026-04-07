@@ -101,6 +101,61 @@ func LoadConfigFromEnv() Config {
 	}
 }
 
+// ProviderInfo describes a sourcing provider for informational purposes.
+type ProviderInfo struct {
+	Name    string
+	Enabled bool
+}
+
+// Providers returns metadata about each configured provider.
+func (s *Service) Providers() []ProviderInfo {
+	out := make([]ProviderInfo, len(s.providers))
+	for i, p := range s.providers {
+		out[i] = ProviderInfo{Name: p.Name(), Enabled: p.Enabled()}
+	}
+	return out
+}
+
+// SourceFromProvider searches a single named provider and returns its result.
+// If the provider is not found or not enabled, an error status is returned.
+func (s *Service) SourceFromProvider(ctx context.Context, query RequirementQuery, providerName string) SourceResult {
+	result := SourceResult{
+		Offers:    make([]SupplierOffer, 0, 8),
+		Providers: make([]ProviderStatus, 0, 1),
+		Currency:  s.currency,
+	}
+	for _, provider := range s.providers {
+		if !strings.EqualFold(provider.Name(), providerName) {
+			continue
+		}
+		status := ProviderStatus{Provider: provider.Name()}
+		if !provider.Enabled() {
+			status.Status = "disabled"
+			status.Error = "Provider is not configured"
+			result.Providers = append(result.Providers, status)
+			return result
+		}
+		offers, err := provider.Search(ctx, query)
+		if err != nil {
+			status.Status = "error"
+			status.Error = provider.FriendlyError(err)
+			result.Providers = append(result.Providers, status)
+			return result
+		}
+		status.Status = "success"
+		status.OfferCount = len(offers)
+		result.Providers = append(result.Providers, status)
+		result.Offers = RankOffers(query, offers)
+		return result
+	}
+	result.Providers = append(result.Providers, ProviderStatus{
+		Provider: providerName,
+		Status:   "error",
+		Error:    "provider not found",
+	})
+	return result
+}
+
 func (s *Service) Source(ctx context.Context, query RequirementQuery) SourceResult {
 	result := SourceResult{
 		Offers:    make([]SupplierOffer, 0, 16),

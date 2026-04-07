@@ -159,10 +159,13 @@ func (s *Service) ImportComponentAssets(ctx context.Context, req ImportRequest) 
 		switch asset.AssetType {
 		case "symbol":
 			result.SymbolImported = true
+			result.SymbolAssetID = asset.AssetID
 		case "footprint":
 			result.FootprintImported = true
+			result.FootprintAssetID = asset.AssetID
 		case "3d_model":
 			result.Model3DImported = true
+			result.Model3DAssetID = asset.AssetID
 		}
 	}
 	result.Warnings = append(result.Warnings, ingestResult.Warnings...)

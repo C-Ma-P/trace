@@ -299,6 +299,37 @@ func (a *App) SourceRequirement(requirementID string) (SourceRequirementResponse
 	return sourceResultToResponse(result), nil
 }
 
+func (a *App) SourceRequirementFromProvider(requirementID, providerName string) (SourceRequirementResponse, error) {
+	if err := a.checkReady(); err != nil {
+		return SourceRequirementResponse{}, err
+	}
+	result, err := a.svc.SourceRequirementFromProvider(context.Background(), requirementID, providerName)
+	if err != nil {
+		return SourceRequirementResponse{}, err
+	}
+	return sourceResultToResponse(result), nil
+}
+
+type SourcingProviderInfo struct {
+	Name    string `json:"name"`
+	Enabled bool   `json:"enabled"`
+}
+
+func (a *App) GetSourcingProviders() []SourcingProviderInfo {
+	if err := a.checkReady(); err != nil {
+		return nil
+	}
+	providers, err := a.svc.SourcingProviders(context.Background())
+	if err != nil {
+		return nil
+	}
+	out := make([]SourcingProviderInfo, len(providers))
+	for i, p := range providers {
+		out[i] = SourcingProviderInfo{Name: p.Name, Enabled: p.Enabled}
+	}
+	return out
+}
+
 func (a *App) SelectComponentForRequirement(requirementID, componentID string) error {
 	if err := a.checkReady(); err != nil {
 		return err

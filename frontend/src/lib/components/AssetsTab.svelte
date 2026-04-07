@@ -29,6 +29,7 @@
     label: string;
     icon: string;
     asset: ComponentAsset | null;
+    availableCount: number;
   };
 
   type CandidateGroup = {
@@ -74,11 +75,16 @@
   }
 
   function buildSelectedSlots(): SelectedSlot[] {
+    const byType = new Map<string, number>();
+    for (const a of assets) {
+      byType.set(a.assetType, (byType.get(a.assetType) ?? 0) + 1);
+    }
     return typeOrder.map((t) => ({
       type: t,
       label: typeLabels[t] ?? t,
       icon: typeIcons[t] ?? '•',
       asset: selectedAssetForType(t),
+      availableCount: byType.get(t) ?? 0,
     }));
   }
 
@@ -201,6 +207,9 @@
             </div>
           {:else}
             <span class="selected-none">None</span>
+            {#if slot.availableCount > 0}
+              <span class="selected-available-count">{slot.availableCount} available</span>
+            {/if}
           {/if}
         </div>
       {/each}
@@ -293,6 +302,7 @@
               <div class="asset-row" class:selected={asset.id === group.selectedId}>
                 <div class="asset-info">
                   <div class="asset-info-top">
+                    <span class="asset-type-icon" title={group.label}>{typeIcons[group.type] ?? '•'}</span>
                     <span class="asset-label">{asset.label || '(unlabeled)'}</span>
                     {#if asset.id === group.selectedId}
                       <span class="selected-badge">Selected</span>
@@ -413,6 +423,14 @@
     font-size: 12px;
     color: var(--color-text-muted);
     flex: 1;
+  }
+  .selected-available-count {
+    font-size: 11px;
+    color: var(--color-accent-text, var(--color-text-secondary));
+    background: var(--color-accent-soft);
+    padding: 1px 7px;
+    border-radius: 10px;
+    white-space: nowrap;
   }
   .selected-actions {
     flex-shrink: 0;
@@ -574,6 +592,13 @@
     display: flex;
     align-items: center;
     gap: 8px;
+  }
+  .asset-type-icon {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+    width: 14px;
+    text-align: center;
   }
   .asset-label {
     font-size: 13px;

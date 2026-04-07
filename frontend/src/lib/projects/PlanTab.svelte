@@ -2,6 +2,8 @@
   import {
     planProject,
     sourceRequirement,
+    sourceRequirementFromProvider,
+    getSourcingProviders,
     clearSelectedComponentForRequirement,
     addPartCandidate,
     setPreferredCandidate,
@@ -18,6 +20,7 @@
     type SupplierProviderStatus,
     type CategoryInfo,
     type PartCandidate,
+    type SourcingProviderInfo,
   } from '../backend';
   import { Browser } from '@wailsio/runtime';
 
@@ -35,6 +38,15 @@
   let supplierLoadingByRequirementId = $state<Record<string, boolean>>({});
   let supplierErrorByRequirementId = $state<Record<string, string>>({});
   let actionInProgress = $state<Record<string, boolean>>({});
+
+  // Progress animation state: tracks the animated step index per requirement
+  let supplierProgressStep = $state<Record<string, number>>({});
+  let supplierReceived = $state<Record<string, boolean>>({});
+  // Per-dot state: completing = green ◐ (briefly), done = green ✓
+  let supplierDotCompleting = $state<Record<string, number[]>>({});
+  let supplierDotDone = $state<Record<string, number[]>>({});
+  let knownProviders = $state<SourcingProviderInfo[]>([]);
+  const DOT_COMPLETE_HOLD_MS = 380;
 
   $effect(() => {
     if (project) {
@@ -63,32 +75,123 @@
       return;
     }
 
-    supplierLoadingByRequirementId = {
-      ...supplierLoadingByRequirementId,
-      [requirementId]: true,
-    };
-    supplierErrorByRequirementId = {
-      ...supplierErrorByRequirementId,
-      [requirementId]: '',
-    };
+    // Fetch provider list if we haven't yet (lightweight, cached after first call)
+    if (knownProviders.length === 0) {
+      try {
+        knownProviders = await getSourcingProviders();
+      } catch {
+        // non-fatal; fall back to the single combined call
+      }
+    }
+
+    supplierLoadingByRequirementId = { ...supplierLoadingByRequirementId, [requirementId]: true };
+    supplierErrorByRequirementId = { ...supplierErrorByRequirementId, [requirementId]: '' };
+    supplierProgressStep = { ...supplierProgressStep, [requirementId]: 0 };
+    supplierDotCompleting = { ...supplierDotCompleting, [requirementId]: [] };
+    supplierDotDone = { ...supplierDotDone, [requirementId]: [] };
+
+    const enabledProviders = knownProviders.filter(p => p.enabled);
+
+    // Helper: animate a single dot through completing → done, then merge its offers
+    async function runProvider(idx: number, name: string, accumulated: SourceRequirementResult) {
+      // Mark as active (shown via supplierProgressStep)
+      supplierProgressStep = { ...supplierProgressStep, [requirementId]: idx };
+
+      let providerResult: SourceRequirementResult;
+      try {
+        providerResult = await sourceRequirementFromProvider(requirementId, name);
+      } catch {
+        // treat error as an empty result — provider status will carry the error
+        providerResult = { offers: [], providers: [{ provider: name, status: 'error', error: 'request failed', offerCount: 0 }], currency: '' };
+      }
+
+      // Flash completing (green ◐)
+      supplierDotCompleting = {
+        ...supplierDotCompleting,
+        [requirementId]: [...(supplierDotCompleting[requirementId] ?? []), idx],
+      };
+      await new Promise<void>(r => setTimeout(r, DOT_COMPLETE_HOLD_MS));
+
+      // Graduate to done (green ✓)
+      supplierDotDone = {
+        ...supplierDotDone,
+        [requirementId]: [...(supplierDotDone[requirementId] ?? []), idx],
+      };
+      supplierDotCompleting = {
+        ...supplierDotCompleting,
+        [requirementId]: (supplierDotCompleting[requirementId] ?? []).filter(x => x !== idx),
+      };
+
+      // Merge this provider's offers into the accumulated result
+      accumulated.offers = [...accumulated.offers, ...providerResult.offers];
+      accumulated.providers = [...accumulated.providers, ...providerResult.providers];
+      if (!accumulated.currency && providerResult.currency) {
+        accumulated.currency = providerResult.currency;
+      }
+    }
 
     try {
-      const result = await sourceRequirement(requirementId);
-      supplierResultsByRequirementId = {
-        ...supplierResultsByRequirementId,
-        [requirementId]: result,
-      };
+      if (enabledProviders.length === 0) {
+        // No provider info — fall back to combined call
+        const result = await sourceRequirement(requirementId);
+        supplierResultsByRequirementId = { ...supplierResultsByRequirementId, [requirementId]: result };
+      } else {
+        const accumulated: SourceRequirementResult = { offers: [], providers: [], currency: '' };
+
+        // Fire all providers in parallel; each individually completes its own dot
+        await Promise.all(
+          enabledProviders.map((p, i) => runProvider(i, p.name, accumulated))
+        );
+
+        // All dots done — show "Results received" briefly then reveal
+        supplierReceived = { ...supplierReceived, [requirementId]: true };
+        await new Promise<void>(r => setTimeout(r, 500));
+        supplierResultsByRequirementId = { ...supplierResultsByRequirementId, [requirementId]: accumulated };
+      }
     } catch (e: any) {
-      supplierErrorByRequirementId = {
-        ...supplierErrorByRequirementId,
-        [requirementId]: e?.message ?? String(e),
-      };
+      supplierErrorByRequirementId = { ...supplierErrorByRequirementId, [requirementId]: e?.message ?? String(e) };
     } finally {
-      supplierLoadingByRequirementId = {
-        ...supplierLoadingByRequirementId,
-        [requirementId]: false,
-      };
+      supplierReceived = { ...supplierReceived, [requirementId]: false };
+      supplierDotCompleting = { ...supplierDotCompleting, [requirementId]: [] };
+      supplierDotDone = { ...supplierDotDone, [requirementId]: [] };
+      supplierLoadingByRequirementId = { ...supplierLoadingByRequirementId, [requirementId]: false };
     }
+  }
+
+  function supplierProgressLabel(requirementId: string): string {
+    const enabledProviders = knownProviders.filter(p => p.enabled);
+    if (enabledProviders.length === 0) return 'Finding supplier options…';
+    if (supplierReceived[requirementId]) return 'Results received';
+    const doneDots = supplierDotDone[requirementId] ?? [];
+    if (doneDots.length === enabledProviders.length) return 'Results received';
+    const completingDots = supplierDotCompleting[requirementId] ?? [];
+    // Find the first provider that is currently active or completing
+    for (let i = 0; i < enabledProviders.length; i++) {
+      if (!doneDots.includes(i)) {
+        return completingDots.includes(i)
+          ? `Received ${enabledProviders[i].name}`
+          : `Requesting ${enabledProviders[i].name}…`;
+      }
+    }
+    return 'Waiting for results…';
+  }
+
+  type DotState = 'done' | 'completing' | 'active' | 'pending';
+
+  function supplierProgressDots(requirementId: string): { name: string; state: DotState; label: string }[] {
+    const enabledProviders = knownProviders.filter(p => p.enabled);
+    if (enabledProviders.length === 0) return [];
+    const received = supplierReceived[requirementId];
+    const doneDots = supplierDotDone[requirementId] ?? [];
+    const completingDots = supplierDotCompleting[requirementId] ?? [];
+    return enabledProviders.map((p, i) => {
+      const isDone = received || doneDots.includes(i);
+      const isCompleting = !isDone && completingDots.includes(i);
+      const isActive = !isDone && !isCompleting;
+      const state: DotState = isDone ? 'done' : isCompleting ? 'completing' : isActive ? 'active' : 'pending';
+      const label = isDone ? 'received' : isCompleting ? 'received' : isActive ? 'requesting…' : 'waiting';
+      return { name: p.name, state, label };
+    });
   }
 
   async function handleAddCandidate(requirementId: string, componentId: string) {
@@ -496,7 +599,21 @@
                 </div>
 
                 {#if supplierLoadingByRequirementId[rp.requirement.id]}
-                  <div class="empty-msg">Finding supplier options…</div>
+                  <div class="sourcing-progress" class:sourcing-received={supplierReceived[rp.requirement.id]}>
+                    {#if knownProviders.filter(p => p.enabled).length > 0}
+                      {@const dots = supplierProgressDots(rp.requirement.id)}
+                      <div class="sourcing-provider-rows">
+                        {#each dots as dot}
+                          <div class="sourcing-provider-row">
+                            <span class="sourcing-provider-name sourcing-provider-name--{dot.state}">{dot.name}</span>
+                            <span class="sourcing-provider-status sourcing-provider-status--{dot.state}">{dot.label}</span>
+                          </div>
+                        {/each}
+                      </div>
+                    {:else}
+                      <div class="sourcing-progress-label">{supplierProgressLabel(rp.requirement.id)}</div>
+                    {/if}
+                  </div>
                 {:else if supplierErrorByRequirementId[rp.requirement.id]}
                   <div class="error-text">{supplierErrorByRequirementId[rp.requirement.id]}</div>
                 {:else if supplierResult(rp.requirement.id)}
@@ -613,6 +730,77 @@
     color: var(--color-text-muted);
     font-size: 13px;
     padding: 12px 0;
+  }
+  .sourcing-progress {
+    padding: 12px 0 10px;
+  }
+  .sourcing-progress-label {
+    font-size: 13px;
+    color: var(--color-text-secondary);
+    font-style: italic;
+    animation: sourcing-pulse 1.4s ease-in-out infinite;
+  }
+  .sourcing-provider-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .sourcing-provider-row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    font-size: 13px;
+  }
+  .sourcing-provider-name {
+    min-width: 80px;
+    transition: color 0.25s ease;
+  }
+  .sourcing-provider-name--done {
+    color: #38a169;
+  }
+  .sourcing-provider-name--completing {
+    color: #38a169;
+  }
+  .sourcing-provider-name--active {
+    color: var(--color-text-primary);
+  }
+  .sourcing-provider-name--pending {
+    color: var(--color-text-muted);
+  }
+  .sourcing-provider-status {
+    font-size: 12px;
+    font-style: italic;
+    transition: color 0.25s ease;
+  }
+  .sourcing-provider-status--done {
+    color: #38a169;
+    font-style: normal;
+    font-weight: 500;
+    animation: status-arrive 0.35s ease-out;
+  }
+  .sourcing-provider-status--completing {
+    color: #38a169;
+    font-style: normal;
+    font-weight: 500;
+    animation: status-arrive 0.35s ease-out;
+    text-shadow: 0 0 10px rgba(56, 161, 105, 0.7);
+  }
+  .sourcing-provider-status--active {
+    color: var(--color-text-secondary);
+    animation: sourcing-pulse 1.4s ease-in-out infinite;
+    text-shadow: 0 0 8px currentColor;
+  }
+  .sourcing-provider-status--pending {
+    color: var(--color-text-muted);
+    opacity: 0.45;
+  }
+  @keyframes status-arrive {
+    0% { opacity: 0.4; transform: translateX(-4px); }
+    100% { opacity: 1; transform: translateX(0); }
+  }
+  @keyframes sourcing-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.45; }
   }
   .plan-list {
     display: flex;

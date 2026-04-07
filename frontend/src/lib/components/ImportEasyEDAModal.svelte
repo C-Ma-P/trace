@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Modal from '../ui/Modal.svelte';
   import { importEasyEDAAssets, type EasyEDAImportResult } from '../backend';
 
   let { open = false, componentId, onimported, onclose }: {
@@ -38,30 +39,20 @@
   }
 
   function handleClose() {
-    if (busy) return;
     lcscId = '';
     error = '';
     result = null;
     onclose?.();
   }
 
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') handleClose();
+  function handleInputKeydown(e: KeyboardEvent) {
     if (e.key === 'Enter' && canImport) handleImport();
   }
 </script>
 
-{#if open}
-  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-  <div class="modal-overlay" role="dialog" aria-modal="true" onkeydown={handleKeydown}>
-    <div class="modal-panel">
-      <div class="modal-header">
-        <h2 class="modal-title">Import from EasyEDA / LCSC</h2>
-        <button class="modal-close" onclick={handleClose} disabled={busy}>✕</button>
-      </div>
-
-      <div class="modal-body">
-        {#if !result}
+<Modal {open} title="Import from EasyEDA / LCSC" onclose={handleClose}>
+  <div class="easyeda-modal">
+    {#if !result}
           <p class="modal-desc">
             Enter an LCSC part number to import KiCad-compatible symbol, footprint, and 3D model assets.
           </p>
@@ -75,6 +66,7 @@
               bind:value={lcscId}
               placeholder="e.g. C2040"
               disabled={busy}
+              onkeydown={handleInputKeydown}
             />
             {#if lcscId && !isValidLCSCID(lcscId)}
               <span class="input-hint error-text">Must be "C" followed by digits (e.g. C2040)</span>
@@ -141,57 +133,12 @@
             </div>
           </div>
         {/if}
-      </div>
-    </div>
   </div>
-{/if}
+</Modal>
 
 <style>
-  .modal-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 1000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0, 0, 0, 0.5);
-  }
-  .modal-panel {
-    background: var(--color-bg-primary);
-    border-radius: var(--radius-lg, 12px);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    width: 420px;
-    max-width: 90vw;
-    max-height: 80vh;
-    overflow-y: auto;
-  }
-  .modal-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px 20px 12px;
-    border-bottom: 1px solid var(--color-border);
-  }
-  .modal-title {
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--color-text-primary);
-  }
-  .modal-close {
-    background: none;
-    border: none;
-    font-size: 16px;
-    cursor: pointer;
-    color: var(--color-text-secondary);
-    padding: 4px;
-    border-radius: var(--radius-sm, 4px);
-  }
-  .modal-close:hover {
-    color: var(--color-text-primary);
-    background: var(--color-bg-hover);
-  }
-  .modal-body {
-    padding: 16px 20px 20px;
+  .easyeda-modal {
+    /* content wrapper inside Modal.svelte body */
   }
   .modal-desc {
     font-size: 12px;

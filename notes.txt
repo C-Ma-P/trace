@@ -1,0 +1,4 @@
+TODO
+
+- numeric backend for auto multiplying/dividing and showing appropriate unit to look nice, uF, nF etc
+- no dedupe detection on import assets for components from lcsc/easyeda option

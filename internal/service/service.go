@@ -212,6 +212,44 @@ func (s *Service) resolveSourcingService(ctx context.Context) (*sourcing.Service
 	return nil, fmt.Errorf("sourcing not configured")
 }
 
+// SourcingProviders returns metadata about each configured sourcing provider.
+func (s *Service) SourcingProviders(ctx context.Context) ([]sourcing.ProviderInfo, error) {
+	svc, err := s.resolveSourcingService(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return svc.Providers(), nil
+}
+
+// SourceRequirementFromProvider searches a single named provider for the given requirement.
+func (s *Service) SourceRequirementFromProvider(ctx context.Context, requirementID, providerName string) (sourcing.SourceResult, error) {
+	if s.sourcing == nil && s.supplierConfig == nil {
+		return sourcing.SourceResult{}, fmt.Errorf("supplier sourcing not configured")
+	}
+
+	requirement, err := s.projects.GetRequirement(ctx, requirementID)
+	if err != nil {
+		return sourcing.SourceResult{}, err
+	}
+	requirement.NormalizeResolution()
+
+	var selectedDefinition *domain.Component
+	if componentID := requirement.ResolvedComponentID(); componentID != nil {
+		component, err := s.components.GetComponent(ctx, *componentID)
+		if err != nil {
+			return sourcing.SourceResult{}, err
+		}
+		selectedDefinition = &component
+	}
+
+	query := sourcing.BuildRequirementQuery(requirement, selectedDefinition)
+	sourcingSvc, err := s.resolveSourcingService(ctx)
+	if err != nil {
+		return sourcing.SourceResult{}, err
+	}
+	return sourcingSvc.SourceFromProvider(ctx, query, providerName), nil
+}
+
 func (s *Service) ResolveComponentFromOffer(ctx context.Context, offer sourcing.SupplierOffer) (domain.Component, error) {
 	if offer.Manufacturer != "" && offer.MPN != "" {
 		candidates, err := s.components.FindComponents(ctx, domain.ComponentFilter{
