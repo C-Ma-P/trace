@@ -29,6 +29,16 @@ func (a *App) ListComponents(filter ComponentFilterInput) ([]ComponentResponse, 
 	for i, c := range components {
 		out[i] = componentToResponse(c)
 	}
+	if a.bagRepo != nil && len(out) > 0 {
+		ids := make([]string, len(out))
+		for i, c := range out {
+			ids[i] = c.ID
+		}
+		imageURLs := a.bagRepo.FindComponentImageURLs(context.Background(), ids)
+		for i := range out {
+			out[i].ImageURL = imageURLs[out[i].ID]
+		}
+	}
 	return out, nil
 }
 

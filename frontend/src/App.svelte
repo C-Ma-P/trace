@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { Window } from '@wailsio/runtime';
   import Sidebar from './lib/Sidebar.svelte';
   import ComponentsWorkspace from './lib/components/ComponentsWorkspace.svelte';
   import LauncherWorkspace from './lib/launcher/LauncherWorkspace.svelte';
@@ -71,11 +72,36 @@
     }
   }
 
+  const zoomStep = 0.1;
+  const zoomMin = 0.5;
+  const zoomMax = 3.0;
+  let currentZoom = 1.0;
+
+  function handleZoomKey(e: KeyboardEvent) {
+    if (!e.ctrlKey) return;
+    if (e.key === '=' || e.key === '+') {
+      e.preventDefault();
+      currentZoom = Math.min(zoomMax, Math.round((currentZoom + zoomStep) * 10) / 10);
+      void Window.SetZoom(currentZoom);
+    } else if (e.key === '-') {
+      e.preventDefault();
+      currentZoom = Math.max(zoomMin, Math.round((currentZoom - zoomStep) * 10) / 10);
+      void Window.SetZoom(currentZoom);
+    } else if (e.key === '0') {
+      e.preventDefault();
+      currentZoom = 1.0;
+      void Window.SetZoom(currentZoom);
+    }
+  }
+
   // Only startup=unknown needs the async backend check; ready/failed are already resolved.
   onMount(() => {
     if (startup === 'unknown') {
       void hydrateStartupStatus();
     }
+    void Window.GetZoom().then((z) => { currentZoom = z; });
+    window.addEventListener('keydown', handleZoomKey);
+    return () => window.removeEventListener('keydown', handleZoomKey);
   });
 
   // Dismiss the boot shell once the workspace or error screen has rendered.

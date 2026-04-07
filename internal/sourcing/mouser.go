@@ -3,6 +3,7 @@ package sourcing
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	mouser "github.com/PatrickWalther/go-mouser"
@@ -76,6 +77,23 @@ func (p *MouserProvider) Search(ctx context.Context, query RequirementQuery) ([]
 		offers = append(offers, normalizeMouserPart(part))
 	}
 	return offers, nil
+}
+
+func (p *MouserProvider) LookupByPartNumber(ctx context.Context, partNumber string) (SupplierOffer, error) {
+	if !p.Enabled() {
+		return SupplierOffer{}, fmt.Errorf("Mouser provider not configured")
+	}
+	result, err := p.client.Search.PartNumberSearch(ctx, mouser.PartNumberSearchOptions{
+		PartNumber:       partNumber,
+		PartSearchOption: mouser.PartSearchOptionExact,
+	})
+	if err != nil {
+		return SupplierOffer{}, err
+	}
+	if result == nil || len(result.Parts) == 0 {
+		return SupplierOffer{}, fmt.Errorf("part %q not found on Mouser", partNumber)
+	}
+	return normalizeMouserPart(result.Parts[0]), nil
 }
 
 func (p *MouserProvider) FriendlyError(err error) string {

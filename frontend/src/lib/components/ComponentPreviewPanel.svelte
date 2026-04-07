@@ -2,36 +2,70 @@
   import type { ComponentAsset } from '../backend';
   import ModelPreview from './ModelPreview.svelte';
 
-  let { selectedSymbolAsset = null, selectedFootprintAsset = null, selected3dModelAsset = null }: {
+  let {
+    selectedSymbolAsset = null,
+    selectedFootprintAsset = null,
+    selected3dModelAsset = null,
+    selectedDatasheetAsset = null,
+    activeType = 'symbol',
+    onTypeChange,
+  }: {
     selectedSymbolAsset?: ComponentAsset | null;
     selectedFootprintAsset?: ComponentAsset | null;
     selected3dModelAsset?: ComponentAsset | null;
+    selectedDatasheetAsset?: ComponentAsset | null;
+    activeType?: string;
+    onTypeChange?: (type: string) => void;
   } = $props();
 
   type PreviewSlot = {
     key: string;
     label: string;
+    icon: string;
     asset: ComponentAsset | null;
   };
 
-  let slots = $derived([
-    { key: 'symbol', label: 'Symbol', asset: selectedSymbolAsset },
-    { key: 'footprint', label: 'Footprint', asset: selectedFootprintAsset },
-    { key: '3d_model', label: '3D Model', asset: selected3dModelAsset },
-  ] as PreviewSlot[]);
+  let slots = $derived<PreviewSlot[]>([
+    { key: 'symbol', label: 'Symbol', icon: '⏚', asset: selectedSymbolAsset },
+    { key: 'footprint', label: 'Footprint', icon: '⬡', asset: selectedFootprintAsset },
+    { key: '3d_model', label: '3D Model', icon: '◇', asset: selected3dModelAsset },
+    { key: 'datasheet', label: 'Datasheet', icon: '📄', asset: selectedDatasheetAsset },
+  ]);
 
-  let activeKey = $state('symbol');
-
-  let activeSlot = $derived(slots.find((s) => s.key === activeKey) ?? slots[0]);
-
-  /** Whether the active slot should use the interactive 3D viewer. */
+  let activeSlot = $derived(slots.find((s) => s.key === activeType) ?? slots[0]);
   let show3dViewer = $derived(activeSlot.key === '3d_model' && activeSlot.asset != null);
+  let showDatasheet = $derived(activeSlot.key === 'datasheet');
 </script>
 
 <div class="preview-panel">
   <div class="preview-main" class:preview-3d={show3dViewer}>
     {#if show3dViewer}
       <ModelPreview asset={activeSlot.asset!} />
+    {:else if showDatasheet}
+      <!-- Datasheet: show info card or empty state -->
+      {#if activeSlot.asset}
+        <div class="preview-fallback">
+          <div class="fallback-icon">📄</div>
+          <div class="fallback-label">{activeSlot.asset.label || 'Datasheet'}</div>
+          <div class="fallback-meta">
+            {#if activeSlot.asset.source}
+              <span class="meta-tag">{activeSlot.asset.source}</span>
+            {/if}
+          </div>
+          {#if activeSlot.asset.urlOrPath}
+            <div class="fallback-path" title={activeSlot.asset.urlOrPath}>
+              {activeSlot.asset.urlOrPath}
+            </div>
+          {/if}
+          <div class="fallback-note">Datasheet viewer coming soon</div>
+        </div>
+      {:else}
+        <div class="preview-empty">
+          <div class="empty-icon">📄</div>
+          <div class="empty-label">No Datasheet Selected</div>
+          <div class="empty-hint">Attach and select a datasheet asset below</div>
+        </div>
+      {/if}
     {:else if activeSlot.asset && activeSlot.asset.previewUrl}
       <img
         class="preview-image"
@@ -40,11 +74,7 @@
       />
     {:else if activeSlot.asset}
       <div class="preview-fallback">
-        <div class="fallback-icon">
-          {#if activeSlot.key === 'symbol'}⏚
-          {:else if activeSlot.key === 'footprint'}⬡
-          {:else}◇{/if}
-        </div>
+        <div class="fallback-icon">{activeSlot.icon}</div>
         <div class="fallback-label">{activeSlot.asset.label || activeSlot.label}</div>
         <div class="fallback-meta">
           {#if activeSlot.asset.source}
@@ -61,37 +91,28 @@
       </div>
     {:else}
       <div class="preview-empty">
-        <div class="empty-icon">
-          {#if activeSlot.key === 'symbol'}⏚
-          {:else if activeSlot.key === 'footprint'}⬡
-          {:else}◇{/if}
-        </div>
+        <div class="empty-icon">{activeSlot.icon}</div>
         <div class="empty-label">No {activeSlot.label} Selected</div>
-        <div class="empty-hint">Attach and select a {activeSlot.label.toLowerCase()} asset in the Assets tab</div>
+        <div class="empty-hint">Attach and select a {activeSlot.label.toLowerCase()} asset below</div>
       </div>
     {/if}
   </div>
 
+  <!-- Representation type selector -->
   <div class="preview-selectors">
     {#each slots as slot}
       <button
-        class="selector-card"
-        class:active={activeKey === slot.key}
-        onclick={() => (activeKey = slot.key)}
+        class="selector-btn"
+        class:active={activeType === slot.key}
+        onclick={() => onTypeChange?.(slot.key)}
       >
-        <div class="selector-icon">
-          {#if slot.key === 'symbol'}⏚
-          {:else if slot.key === 'footprint'}⬡
-          {:else}◇{/if}
-        </div>
-        <div class="selector-label">{slot.label}</div>
-        <div class="selector-status">
-          {#if slot.asset}
-            <span class="dot dot-has-asset" />
-          {:else}
-            <span class="dot dot-empty" />
-          {/if}
-        </div>
+        <span class="selector-icon">{slot.icon}</span>
+        <span class="selector-label">{slot.label}</span>
+        {#if slot.asset}
+          <span class="selector-dot has-asset"></span>
+        {:else}
+          <span class="selector-dot"></span>
+        {/if}
       </button>
     {/each}
   </div>
@@ -122,7 +143,7 @@
     border-radius: var(--radius-md);
   }
 
-  /* Fallback card: asset exists but no preview_url */
+  /* Fallback card: asset exists but no renderable preview */
   .preview-fallback {
     display: flex;
     flex-direction: column;
@@ -205,35 +226,35 @@
     font-size: 12px;
   }
 
-  /* Selector cards */
+  /* Type selector bar */
   .preview-selectors {
     display: flex;
     gap: 0;
     border-top: 1px solid var(--color-border);
   }
-  .selector-card {
+  .selector-btn {
     flex: 1;
     display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: 4px;
-    padding: 10px 8px;
+    justify-content: center;
+    gap: 5px;
+    padding: 8px 4px;
     cursor: pointer;
     border-bottom: 2px solid transparent;
     transition: background 0.12s, border-color 0.12s;
   }
-  .selector-card:hover {
+  .selector-btn:hover {
     background: var(--color-bg-hover);
   }
-  .selector-card.active {
+  .selector-btn.active {
     border-bottom-color: var(--color-accent);
     background: var(--color-bg-hover);
   }
-  .selector-card + .selector-card {
+  .selector-btn + .selector-btn {
     border-left: 1px solid var(--color-border);
   }
   .selector-icon {
-    font-size: 18px;
+    font-size: 14px;
     color: var(--color-text-secondary);
   }
   .selector-label {
@@ -241,20 +262,15 @@
     font-weight: 500;
     color: var(--color-text-secondary);
   }
-  .selector-status {
-    display: flex;
-    align-items: center;
-  }
-  .dot {
-    width: 6px;
-    height: 6px;
+  .selector-dot {
+    width: 5px;
+    height: 5px;
     border-radius: 50%;
-  }
-  .dot-has-asset {
-    background: var(--color-success);
-  }
-  .dot-empty {
     background: var(--color-text-muted);
-    opacity: 0.4;
+    opacity: 0.3;
+  }
+  .selector-dot.has-asset {
+    background: var(--color-success);
+    opacity: 1;
   }
 </style>

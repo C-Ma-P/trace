@@ -78,7 +78,24 @@ func (a *App) GetComponentDetail(componentID string) (ComponentDetailResponse, e
 	if err != nil {
 		return ComponentDetailResponse{}, err
 	}
-	return componentDetailToResponse(detail), nil
+	r := componentDetailToResponse(detail)
+
+	if a.bagRepo != nil {
+		r.ImageURL = a.bagRepo.FindComponentImageURL(context.Background(), componentID)
+		bagList, bagErr := a.bagRepo.ListBagsByComponent(context.Background(), componentID)
+		if bagErr == nil {
+			bags := make([]BagResponse, len(bagList))
+			for i, b := range bagList {
+				bags[i] = bagToResponse(b)
+			}
+			r.Bags = bags
+		}
+	}
+	if r.Bags == nil {
+		r.Bags = []BagResponse{}
+	}
+
+	return r, nil
 }
 
 func assetToResponse(a domain.ComponentAsset) ComponentAssetResponse {

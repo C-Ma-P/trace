@@ -2,6 +2,7 @@ package sourcing
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -69,6 +70,25 @@ func (p *LCSCProvider) Search(ctx context.Context, query RequirementQuery) ([]Su
 
 func (p *LCSCProvider) FriendlyError(err error) string {
 	return err.Error()
+}
+
+func (p *LCSCProvider) LookupByPartCode(ctx context.Context, partCode string) (SupplierOffer, error) {
+	if !p.Enabled() {
+		return SupplierOffer{}, fmt.Errorf("LCSC provider not configured")
+	}
+	response, err := p.client.Search.Keyword(ctx, &lcsc.SearchRequest{Keyword: partCode})
+	if err != nil {
+		return SupplierOffer{}, err
+	}
+	for _, product := range response.Products {
+		if strings.EqualFold(strings.TrimSpace(product.ProductCode), partCode) {
+			return normalizeLCSCProduct(product), nil
+		}
+	}
+	if len(response.Products) > 0 {
+		return normalizeLCSCProduct(response.Products[0]), nil
+	}
+	return SupplierOffer{}, fmt.Errorf("part %q not found on LCSC", partCode)
 }
 
 func normalizeLCSCProduct(product lcsc.Product) SupplierOffer {

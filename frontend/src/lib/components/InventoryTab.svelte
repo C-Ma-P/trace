@@ -2,11 +2,15 @@
   import {
     updateComponentInventory,
     adjustComponentQuantity,
+    createInventoryBag,
+    deleteInventoryBag,
     type Component,
+    type InventoryBag,
   } from '../backend';
 
-  let { component, onupdated }: {
+  let { component, bags = [], onupdated }: {
     component: Component;
+    bags?: InventoryBag[];
     onupdated?: () => void;
   } = $props();
 
@@ -69,6 +73,51 @@
         ? `~${component.quantity}`
         : String(component.quantity)
   );
+
+  // Bags
+  let bagError = $state('');
+  let creatingBag = $state(false);
+  let newBagLabel = $state('');
+  let showNewBag = $state(false);
+
+  function startNewBag() {
+    newBagLabel = '';
+    bagError = '';
+    showNewBag = true;
+  }
+
+  function cancelNewBag() {
+    showNewBag = false;
+    bagError = '';
+  }
+
+  async function submitNewBag() {
+    const label = newBagLabel.trim();
+    if (!label) { bagError = 'Label is required.'; return; }
+    creatingBag = true;
+    bagError = '';
+    try {
+      const qrData = `cm:bag:${component.id}:${Date.now()}`;
+      await createInventoryBag({ componentId: component.id, label, qrData });
+      showNewBag = false;
+      newBagLabel = '';
+      onupdated?.();
+    } catch (e: any) {
+      bagError = e?.message ?? String(e);
+    } finally {
+      creatingBag = false;
+    }
+  }
+
+  async function removeBag(id: string) {
+    bagError = '';
+    try {
+      await deleteInventoryBag(id);
+      onupdated?.();
+    } catch (e: any) {
+      bagError = e?.message ?? String(e);
+    }
+  }
 </script>
 
 <div class="inventory-tab">
@@ -158,6 +207,55 @@
       </div>
     {/if}
   {/if}
+
+  <div class="bags-section">
+    <div class="section-header" style="margin-top: 24px;">
+      <h3 class="section-title">Inventory Bags</h3>
+      {#if !showNewBag}
+        <button class="btn btn-secondary btn-sm" onclick={startNewBag}>+ New Bag</button>
+      {/if}
+    </div>
+
+    {#if bagError}
+      <div class="error-text" style="margin-bottom: 10px;">{bagError}</div>
+    {/if}
+
+    {#if showNewBag}
+      <div class="new-bag-form">
+        <input
+          class="form-input"
+          placeholder="Bag label (e.g. Bin A3)"
+          bind:value={newBagLabel}
+        />
+        <div class="new-bag-actions">
+          <button class="btn btn-secondary btn-sm" onclick={cancelNewBag} disabled={creatingBag}>Cancel</button>
+          <button class="btn btn-primary btn-sm" onclick={submitNewBag} disabled={creatingBag}>
+            {creatingBag ? 'Creating…' : 'Create'}
+          </button>
+        </div>
+      </div>
+    {/if}
+
+    {#if bags.length === 0 && !showNewBag}
+      <p class="bags-empty">No bags yet. Create one to link a QR-code label to this component.</p>
+    {:else}
+      <ul class="bag-list">
+        {#each bags as bag (bag.id)}
+          <li class="bag-item">
+            <div class="bag-info">
+              <span class="bag-label">{bag.label}</span>
+              <span class="bag-qr">{bag.qrData}</span>
+            </div>
+            <button
+              class="btn btn-ghost btn-sm bag-delete"
+              onclick={() => removeBag(bag.id)}
+              title="Remove bag"
+            >✕</button>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+  </div>
 </div>
 
 <style>
@@ -234,5 +332,70 @@
   .adjust-btn {
     font-variant-numeric: tabular-nums;
     min-width: 42px;
+  }
+  .bags-section {
+    border-top: 1px solid var(--color-border);
+    padding-top: 4px;
+  }
+  .new-bag-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .new-bag-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+  .bags-empty {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    margin: 0;
+  }
+  .bag-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .bag-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    border-radius: var(--radius-md);
+    background: var(--color-bg-muted);
+    border: 1px solid var(--color-border);
+  }
+  .bag-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .bag-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-text-primary);
+  }
+  .bag-qr {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    font-family: monospace;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 240px;
+  }
+  .bag-delete {
+    color: var(--color-text-muted);
+    padding: 2px 6px;
+    flex-shrink: 0;
+  }
+  .bag-delete:hover {
+    color: var(--color-danger);
   }
 </style>

@@ -2,6 +2,7 @@ package sourcing
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -149,4 +150,21 @@ func dedupeOffers(offers []SupplierOffer) []SupplierOffer {
 		result = append(result, offer)
 	}
 	return result
+}
+
+func (s *Service) LookupByVendorPartID(ctx context.Context, vendor, partID string) (SupplierOffer, error) {
+	for _, p := range s.providers {
+		if !strings.EqualFold(p.Name(), vendor) || !p.Enabled() {
+			continue
+		}
+		switch v := p.(type) {
+		case *LCSCProvider:
+			return v.LookupByPartCode(ctx, partID)
+		case *MouserProvider:
+			return v.LookupByPartNumber(ctx, partID)
+		default:
+			return SupplierOffer{}, fmt.Errorf("provider %q does not support barcode lookup", vendor)
+		}
+	}
+	return SupplierOffer{}, fmt.Errorf("provider %q not found or not enabled", vendor)
 }

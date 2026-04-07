@@ -320,8 +320,8 @@ func (c *Controller) OpenProjectWindow(projectID string, hideLauncher bool) erro
 	projectWindow := c.app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:             name,
 		Title:            title,
-		Width:            1280,
-		Height:           800,
+		Width:            1920,
+		Height:           1080,
 		MinWidth:         900,
 		MinHeight:        600,
 		BackgroundColour: traceWindowBackground,

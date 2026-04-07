@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"strings"
 
 	"componentmanager/internal/domain"
 )
@@ -77,4 +79,36 @@ LIMIT 1
 		return ""
 	}
 	return url
+}
+
+// FindComponentImageURLs returns a map of component ID -> first non-empty image URL
+// for the given set of component IDs, in a single query.
+func (r *BagRepository) FindComponentImageURLs(ctx context.Context, componentIDs []string) map[string]string {
+	result := make(map[string]string, len(componentIDs))
+	if len(componentIDs) == 0 {
+		return result
+	}
+	placeholders := make([]string, len(componentIDs))
+	args := make([]interface{}, len(componentIDs))
+	for i, id := range componentIDs {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = id
+	}
+	rows, err := r.store.db.QueryContext(ctx, fmt.Sprintf(`
+SELECT DISTINCT ON (linked_component_id) linked_component_id, image_url
+FROM saved_supplier_offers
+WHERE linked_component_id IN (%s) AND image_url != ''
+ORDER BY linked_component_id, id
+`, strings.Join(placeholders, ",")), args...)
+	if err != nil {
+		return result
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var compID, url string
+		if err := rows.Scan(&compID, &url); err == nil {
+			result[compID] = url
+		}
+	}
+	return result
 }

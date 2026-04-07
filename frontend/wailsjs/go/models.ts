@@ -309,6 +309,28 @@ export namespace app {
 		    return a;
 		}
 	}
+	export class BagResponse {
+	    id: string;
+	    label: string;
+	    qrData: string;
+	    componentId: string;
+	    createdAt: string;
+	    updatedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new BagResponse(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.label = source["label"];
+	        this.qrData = source["qrData"];
+	        this.componentId = source["componentId"];
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
+	    }
+	}
 	export class ComponentDetailResponse {
 	    component: ComponentResponse;
 	    selectedSymbolAsset?: ComponentAssetResponse;
@@ -316,6 +338,8 @@ export namespace app {
 	    selected3dModelAsset?: ComponentAssetResponse;
 	    selectedDatasheetAsset?: ComponentAssetResponse;
 	    assets: ComponentAssetResponse[];
+	    imageUrl: string;
+	    bags: BagResponse[];
 	
 	    static createFrom(source: any = {}) {
 	        return new ComponentDetailResponse(source);
@@ -329,6 +353,8 @@ export namespace app {
 	        this.selected3dModelAsset = this.convertValues(source["selected3dModelAsset"], ComponentAssetResponse);
 	        this.selectedDatasheetAsset = this.convertValues(source["selectedDatasheetAsset"], ComponentAssetResponse);
 	        this.assets = this.convertValues(source["assets"], ComponentAssetResponse);
+	        this.imageUrl = source["imageUrl"];
+	        this.bags = this.convertValues(source["bags"], BagResponse);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

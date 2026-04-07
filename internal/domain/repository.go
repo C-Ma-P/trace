@@ -66,6 +66,7 @@ type InventoryBagRepository interface {
 	ListBagsByComponent(context.Context, string) ([]InventoryBag, error)
 	DeleteBag(context.Context, string) error
 	FindComponentImageURL(context.Context, string) string
+	FindComponentImageURLs(context.Context, []string) map[string]string
 }
 
 type PreferenceRepository interface {

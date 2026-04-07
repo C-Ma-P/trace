@@ -11,7 +11,7 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"strings"
+
 	"sync"
 	"time"
 
@@ -22,6 +22,7 @@ import (
 const (
 	defaultPort     = 8741
 	maxRecentEvents = 50
+	maxPendingScans = 500
 )
 
 // Server runs a local HTTP server for phone-based inventory intake.
@@ -34,6 +35,7 @@ type Server struct {
 	mu      sync.Mutex
 	running bool
 	recent  []IntakeEvent
+	pending map[string]*PendingScan
 	httpSrv *http.Server
 	lanIP   string
 }
@@ -50,12 +52,13 @@ func NewServer(
 	}
 	token := generateToken()
 	return &Server{
-		svc:   svc,
-		bags:  bags,
-		comps: comps,
-		token: token,
-		port:  port,
-		lanIP: detectLANIP(),
+		svc:     svc,
+		bags:    bags,
+		comps:   comps,
+		token:   token,
+		port:    port,
+		lanIP:   detectLANIP(),
+		pending: make(map[string]*PendingScan),
 	}
 }
 
@@ -83,14 +86,15 @@ func (s *Server) Start() error {
 	mux := http.NewServeMux()
 	prefix := "/phone/" + s.token
 	mux.HandleFunc(prefix, s.handlePage)
-	mux.HandleFunc(prefix+"/api/lookup", s.handleLookup)
-	mux.HandleFunc(prefix+"/api/submit", s.handleSubmit)
 	mux.HandleFunc(prefix+"/api/recent", s.handleRecent)
+	mux.HandleFunc(prefix+"/api/scan", s.handleScan)
+	mux.HandleFunc(prefix+"/api/detail", s.handleDetail)
+	mux.HandleFunc(prefix+"/api/confirm", s.handleConfirm)
 
 	s.httpSrv = &http.Server{
 		Handler:      mux,
 		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
+		WriteTimeout: 30 * time.Second,
 	}
 	s.running = true
 
@@ -170,110 +174,6 @@ func (s *Server) handlePage(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(phonePage(s.token)))
 }
 
-func (s *Server) handleLookup(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var req LookupRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, LookupResponse{RawQR: ""})
-		return
-	}
-
-	qr := strings.TrimSpace(req.QRData)
-	if qr == "" {
-		writeJSON(w, http.StatusBadRequest, LookupResponse{RawQR: ""})
-		return
-	}
-
-	ctx := context.Background()
-	resp := s.lookupQR(ctx, qr)
-
-	action := "lookup"
-	ev := IntakeEvent{
-		Timestamp:   time.Now(),
-		QRData:      qr,
-		ComponentID: resp.ComponentID,
-		DisplayName: resp.DisplayName,
-		Action:      action,
-		Success:     resp.Found,
-	}
-	s.addEvent(ev)
-
-	writeJSON(w, http.StatusOK, resp)
-}
-
-func (s *Server) handleSubmit(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var req SubmitRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, SubmitResponse{Error: "invalid request"})
-		return
-	}
-
-	if req.ComponentID == "" {
-		writeJSON(w, http.StatusBadRequest, SubmitResponse{Error: "componentId required"})
-		return
-	}
-	if req.Mode != "set" && req.Mode != "delta" {
-		writeJSON(w, http.StatusBadRequest, SubmitResponse{Error: "mode must be 'set' or 'delta'"})
-		return
-	}
-
-	ctx := context.Background()
-	var comp domain.Component
-	var err error
-
-	if req.Mode == "delta" {
-		comp, err = s.svc.AdjustComponentQuantity(ctx, req.ComponentID, req.Value)
-	} else {
-		// Set exact quantity
-		existing, getErr := s.comps.GetComponent(ctx, req.ComponentID)
-		if getErr != nil {
-			writeJSON(w, http.StatusNotFound, SubmitResponse{Error: "component not found"})
-			return
-		}
-		qty := req.Value
-		existing.Quantity = &qty
-		if existing.QuantityMode == domain.QuantityModeUnknown || existing.QuantityMode == "" {
-			existing.QuantityMode = domain.QuantityModeExact
-		}
-		comp, err = s.svc.UpdateComponentInventory(ctx, existing)
-	}
-
-	displayName := componentDisplayName(comp)
-	ev := IntakeEvent{
-		Timestamp:   time.Now(),
-		ComponentID: req.ComponentID,
-		DisplayName: displayName,
-		Action:      "submit",
-	}
-
-	if err != nil {
-		ev.Success = false
-		ev.Error = err.Error()
-		s.addEvent(ev)
-		writeJSON(w, http.StatusInternalServerError, SubmitResponse{Error: err.Error()})
-		return
-	}
-
-	ev.Success = true
-	ev.NewQuantity = comp.Quantity
-	s.addEvent(ev)
-
-	writeJSON(w, http.StatusOK, SubmitResponse{
-		Success:     true,
-		Quantity:    comp.Quantity,
-		DisplayName: displayName,
-	})
-}
-
 func (s *Server) handleRecent(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -282,61 +182,160 @@ func (s *Server) handleRecent(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.RecentEvents())
 }
 
-// ---------- lookup logic ----------
-
-func (s *Server) lookupQR(ctx context.Context, qr string) LookupResponse {
-	// 1. Try bag lookup by exact QR data
-	bag, err := s.bags.GetBagByQRData(ctx, qr)
-	if err == nil {
-		comp, compErr := s.comps.GetComponent(ctx, bag.ComponentID)
-		if compErr == nil {
-			return s.componentToLookup(comp, bag.Label, qr)
-		}
+func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodPost:
+		s.handleScanPost(w, r)
+	case http.MethodDelete:
+		id := r.URL.Query().Get("id")
+		s.mu.Lock()
+		delete(s.pending, id)
+		s.mu.Unlock()
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
-
-	// 2. Fallback: try matching by MPN (case-insensitive)
-	comps, err := s.comps.FindComponents(ctx, domain.ComponentFilter{MPN: qr})
-	if err == nil && len(comps) == 1 {
-		return s.componentToLookup(comps[0], "", qr)
-	}
-
-	// 3. Unresolved
-	return LookupResponse{Found: false, RawQR: qr}
 }
 
-func (s *Server) componentToLookup(c domain.Component, bagLabel, rawQR string) LookupResponse {
-	imageURL := s.bags.FindComponentImageURL(context.Background(), c.ID)
-	return LookupResponse{
-		Found:        true,
-		ComponentID:  c.ID,
-		DisplayName:  componentDisplayName(c),
-		Manufacturer: c.Manufacturer,
-		MPN:          c.MPN,
-		Description:  c.Description,
-		Package:      c.Package,
-		Quantity:     c.Quantity,
-		QuantityMode: string(c.QuantityMode),
-		Location:     c.Location,
-		ImageURL:     imageURL,
-		BagLabel:     bagLabel,
-		RawQR:        rawQR,
+func (s *Server) handleScanPost(w http.ResponseWriter, r *http.Request) {
+	var req ScanRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, ScanResponse{Error: "invalid request"})
+		return
 	}
+
+	var vendorPartID, quantity string
+	switch req.Vendor {
+	case "LCSC":
+		vendorPartID, quantity = parseLcscBarcode(req.RawValue)
+		log.Printf("[phone-intake] LCSC scan: partID=%s qty=%s", vendorPartID, quantity)
+	case "Mouser":
+		vendorPartID, quantity = parseMouserBarcode(req.RawValue)
+		log.Printf("[phone-intake] Mouser scan: part=%s qty=%s", vendorPartID, quantity)
+	default:
+		log.Printf("[phone-intake] unknown vendor %q format=%s", req.Vendor, req.Format)
+		writeJSON(w, http.StatusOK, ScanResponse{OK: true})
+		return
+	}
+
+	id := generateToken()
+	scan := &PendingScan{
+		ID:        id,
+		Timestamp: time.Now(),
+		Vendor:    req.Vendor,
+		Format:    req.Format,
+		RawValue:  req.RawValue,
+		Quantity:  quantity,
+	}
+
+	resp := ScanResponse{OK: true, ID: id, Quantity: quantity}
+
+	if vendorPartID != "" {
+		offer, err := s.svc.LookupVendorPartID(r.Context(), req.Vendor, vendorPartID)
+		if err != nil {
+			scan.Error = err.Error()
+			resp.ResolveError = err.Error()
+			log.Printf("[phone-intake] lookup failed vendor=%s partID=%s: %v", req.Vendor, vendorPartID, err)
+		} else {
+			// Populate display data from the offer without touching the DB.
+			// Component creation is deferred until handleConfirm.
+			resolved := &ResolvedComponent{
+				MPN:          offer.MPN,
+				Manufacturer: offer.Manufacturer,
+				Package:      offer.Package,
+				Description:  offer.Description,
+				ImageURL:     offer.ImageURL,
+				ProductURL:   offer.ProductURL,
+			}
+			scan.Resolved = resolved
+			scan.Offer = &offer
+			resp.Resolved = resolved
+		}
+	} else {
+		scan.Error = "no part ID found in barcode"
+		resp.ResolveError = scan.Error
+	}
+
+	s.mu.Lock()
+	s.pending[id] = scan
+	if len(s.pending) > maxPendingScans {
+		var oldestID string
+		var oldestTime time.Time
+		for pid, ps := range s.pending {
+			if oldestID == "" || ps.Timestamp.Before(oldestTime) {
+				oldestID = pid
+				oldestTime = ps.Timestamp
+			}
+		}
+		delete(s.pending, oldestID)
+	}
+	s.mu.Unlock()
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, DetailResponse{Error: "missing id"})
+		return
+	}
+	s.mu.Lock()
+	scan, ok := s.pending[id]
+	s.mu.Unlock()
+	if !ok {
+		writeJSON(w, http.StatusNotFound, DetailResponse{Error: "not found"})
+		return
+	}
+	writeJSON(w, http.StatusOK, DetailResponse{OK: true, Scan: *scan})
+}
+
+func (s *Server) handleConfirm(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req ConfirmRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, ConfirmResponse{Error: "invalid request"})
+		return
+	}
+	s.mu.Lock()
+	scan, ok := s.pending[req.ID]
+	if ok {
+		delete(s.pending, req.ID)
+	}
+	s.mu.Unlock()
+	if !ok {
+		writeJSON(w, http.StatusNotFound, ConfirmResponse{Error: "scan not found"})
+		return
+	}
+	if scan.Offer == nil {
+		writeJSON(w, http.StatusBadRequest, ConfirmResponse{Error: "component not resolved"})
+		return
+	}
+	component, err := s.svc.ResolveComponentFromOffer(r.Context(), *scan.Offer)
+	if err != nil {
+		log.Printf("[phone-intake] resolve failed on confirm scan=%s: %v", req.ID, err)
+		writeJSON(w, http.StatusInternalServerError, ConfirmResponse{Error: err.Error()})
+		return
+	}
+	if req.Quantity > 0 {
+		if _, err := s.svc.StampInventory(r.Context(), component.ID, req.Quantity); err != nil {
+			log.Printf("[phone-intake] inventory stamp failed componentID=%s qty=%d: %v", component.ID, req.Quantity, err)
+			writeJSON(w, http.StatusInternalServerError, ConfirmResponse{Error: err.Error()})
+			return
+		}
+	}
+	log.Printf("[phone-intake] confirmed scan %s vendor=%s componentID=%s qty=%d", req.ID, scan.Vendor, component.ID, req.Quantity)
+	writeJSON(w, http.StatusOK, ConfirmResponse{OK: true})
 }
 
 // ---------- helpers ----------
-
-func componentDisplayName(c domain.Component) string {
-	if c.MPN != "" && c.Manufacturer != "" {
-		return c.Manufacturer + " " + c.MPN
-	}
-	if c.MPN != "" {
-		return c.MPN
-	}
-	if c.Description != "" {
-		return c.Description
-	}
-	return c.ID
-}
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")

@@ -104,6 +104,7 @@ type ComponentResponse struct {
 	QuantityMode string                   `json:"quantityMode"`
 	Location     string                   `json:"location"`
 	Attributes   []AttributeValueResponse `json:"attributes"`
+	ImageURL     string                   `json:"imageUrl"`
 	CreatedAt    string                   `json:"createdAt"`
 	UpdatedAt    string                   `json:"updatedAt"`
 }
@@ -264,6 +265,8 @@ type ComponentDetailResponse struct {
 	Selected3DModelAsset   *ComponentAssetResponse  `json:"selected3dModelAsset"`
 	SelectedDatasheetAsset *ComponentAssetResponse  `json:"selectedDatasheetAsset"`
 	Assets                 []ComponentAssetResponse `json:"assets"`
+	ImageURL               string                   `json:"imageUrl"`
+	Bags                   []BagResponse            `json:"bags"`
 }
 
 type StartupStatusResponse struct {

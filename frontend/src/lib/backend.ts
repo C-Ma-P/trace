@@ -42,6 +42,7 @@ export interface Component {
   quantityMode: 'exact' | 'approximate' | 'unknown';
   location: string;
   attributes: AttributeValue[];
+  imageUrl: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -330,6 +331,8 @@ export interface ComponentDetail {
   selected3dModelAsset: ComponentAsset | null;
   selectedDatasheetAsset: ComponentAsset | null;
   assets: ComponentAsset[];
+  imageUrl: string;
+  bags: InventoryBag[];
 }
 
 export interface StartupStatus {

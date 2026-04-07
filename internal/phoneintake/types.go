@@ -1,43 +1,10 @@
 package phoneintake
 
-import "time"
+import (
+	"time"
 
-// LookupRequest is sent by the phone to resolve a scanned QR code.
-type LookupRequest struct {
-	QRData string `json:"qrData"`
-}
-
-// LookupResponse contains resolved component information or an unresolved state.
-type LookupResponse struct {
-	Found        bool   `json:"found"`
-	ComponentID  string `json:"componentId,omitempty"`
-	DisplayName  string `json:"displayName,omitempty"`
-	Manufacturer string `json:"manufacturer,omitempty"`
-	MPN          string `json:"mpn,omitempty"`
-	Description  string `json:"description,omitempty"`
-	Package      string `json:"package,omitempty"`
-	Quantity     *int   `json:"quantity"`
-	QuantityMode string `json:"quantityMode,omitempty"`
-	Location     string `json:"location,omitempty"`
-	ImageURL     string `json:"imageUrl,omitempty"`
-	BagLabel     string `json:"bagLabel,omitempty"`
-	RawQR        string `json:"rawQr"`
-}
-
-// SubmitRequest is sent by the phone to update inventory.
-type SubmitRequest struct {
-	ComponentID string `json:"componentId"`
-	Mode        string `json:"mode"` // "set" or "delta"
-	Value       int    `json:"value"`
-}
-
-// SubmitResponse confirms the inventory update.
-type SubmitResponse struct {
-	Success     bool   `json:"success"`
-	Quantity    *int   `json:"quantity"`
-	DisplayName string `json:"displayName"`
-	Error       string `json:"error,omitempty"`
-}
+	"componentmanager/internal/sourcing"
+)
 
 // IntakeEvent records a recent phone intake action for desktop visibility.
 type IntakeEvent struct {
@@ -49,6 +16,68 @@ type IntakeEvent struct {
 	NewQuantity *int      `json:"newQuantity,omitempty"`
 	Success     bool      `json:"success"`
 	Error       string    `json:"error,omitempty"`
+}
+
+// ScanRequest is sent by the phone when a barcode is detected and routed.
+type ScanRequest struct {
+	Vendor   string `json:"vendor"`   // "LCSC" or "Mouser"
+	Format   string `json:"format"`   // barcode format, e.g. "qr_code", "data_matrix"
+	RawValue string `json:"rawValue"` // raw decoded string from the detector
+}
+
+// ResolvedComponent holds the resolved component data for a pending scan.
+type ResolvedComponent struct {
+	ComponentID  string `json:"componentId"`
+	MPN          string `json:"mpn"`
+	Manufacturer string `json:"manufacturer"`
+	Package      string `json:"package"`
+	Description  string `json:"description"`
+	ImageURL     string `json:"imageUrl"`
+	ProductURL   string `json:"productUrl"`
+}
+
+// ScanResponse is returned after processing a scan.
+type ScanResponse struct {
+	OK           bool               `json:"ok"`
+	Error        string             `json:"error,omitempty"`
+	ID           string             `json:"id,omitempty"`
+	Quantity     string             `json:"quantity,omitempty"`
+	Resolved     *ResolvedComponent `json:"resolved,omitempty"`
+	ResolveError string             `json:"resolveError,omitempty"`
+}
+
+// PendingScan holds a decoded scan in memory awaiting user confirmation.
+type PendingScan struct {
+	ID        string             `json:"id"`
+	Timestamp time.Time          `json:"timestamp"`
+	Vendor    string             `json:"vendor"`
+	Format    string             `json:"format"`
+	RawValue  string             `json:"rawValue"`
+	Resolved  *ResolvedComponent `json:"resolved,omitempty"`
+	Error     string             `json:"error,omitempty"`
+	Quantity  string             `json:"quantity"`
+	// Offer holds the raw supplier data; not exposed to the frontend.
+	// Component creation is deferred until the user confirms the scan.
+	Offer *sourcing.SupplierOffer `json:"-"`
+}
+
+// DetailResponse is returned by the /api/detail endpoint.
+type DetailResponse struct {
+	OK    bool        `json:"ok"`
+	Error string      `json:"error,omitempty"`
+	Scan  PendingScan `json:"scan,omitempty"`
+}
+
+// ConfirmRequest is sent by the phone to register a pending scan.
+type ConfirmRequest struct {
+	ID       string `json:"id"`
+	Quantity int    `json:"quantity"`
+}
+
+// ConfirmResponse is returned after confirming a scan.
+type ConfirmResponse struct {
+	OK    bool   `json:"ok"`
+	Error string `json:"error,omitempty"`
 }
 
 // StatusInfo is returned to the desktop UI.

@@ -82,16 +82,35 @@
         class:selected={selectedId === comp.id}
         onclick={() => onselect?.(comp.id)}
       >
-        <div class="item-main">
-          <span class="item-mpn">{comp.mpn || '—'}</span>
-          <span class="item-mfr">{comp.manufacturer || '—'}</span>
-        </div>
-        <div class="item-meta">
-          <span class="badge">{categoryDisplayName(categories, comp.category)}</span>
-          {#if comp.package}
-            <span class="item-pkg">{comp.package}</span>
+        <div class="item-thumb">
+          {#if comp.imageUrl}
+            <img src={comp.imageUrl} alt="" class="thumb-img" />
+          {:else}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+              <rect x="6" y="6" width="12" height="12" rx="1"/>
+              <line x1="6" y1="10" x2="3" y2="10"/>
+              <line x1="6" y1="14" x2="3" y2="14"/>
+              <line x1="18" y1="10" x2="21" y2="10"/>
+              <line x1="18" y1="14" x2="21" y2="14"/>
+              <line x1="10" y1="6" x2="10" y2="3"/>
+              <line x1="14" y1="6" x2="14" y2="3"/>
+              <line x1="10" y1="18" x2="10" y2="21"/>
+              <line x1="14" y1="18" x2="14" y2="21"/>
+            </svg>
           {/if}
-          <span class="item-qty">{quantityDisplay(comp)} pcs</span>
+        </div>
+        <div class="item-content">
+          <div class="item-main">
+            <span class="item-mpn">{comp.mpn || '—'}</span>
+            <span class="item-mfr">{comp.manufacturer || '—'}</span>
+          </div>
+          <div class="item-meta">
+            <span class="badge">{categoryDisplayName(categories, comp.category)}</span>
+            {#if comp.package}
+              <span class="item-pkg">{comp.package}</span>
+            {/if}
+            <span class="item-qty">{quantityDisplay(comp)} pcs</span>
+          </div>
         </div>
       </button>
     {/each}
@@ -131,13 +150,38 @@
   }
   .list-item {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    align-items: center;
+    gap: 10px;
     width: 100%;
-    padding: 10px 12px;
+    padding: 8px 12px;
     text-align: left;
     border-bottom: 1px solid var(--color-border);
     transition: background 0.1s;
+  }
+  .item-thumb {
+    flex-shrink: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-md);
+    background: var(--color-bg-muted);
+    border: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+    overflow: hidden;
+  }
+  .thumb-img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+  .item-content {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
   }
   .list-item:hover {
     background: var(--color-bg-hover);

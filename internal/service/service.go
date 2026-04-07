@@ -172,6 +172,83 @@ func (s *Service) AdjustComponentQuantity(ctx context.Context, id string, delta 
 	return s.components.UpdateComponentInventory(ctx, c)
 }
 
+func (s *Service) StampInventory(ctx context.Context, id string, qty int) (domain.Component, error) {
+	c, err := s.components.GetComponent(ctx, id)
+	if err != nil {
+		return domain.Component{}, err
+	}
+	if c.QuantityMode == domain.QuantityModeUnknown || c.QuantityMode == "" {
+		c.QuantityMode = domain.QuantityModeExact
+		c.Quantity = &qty
+		return s.components.UpdateComponentInventory(ctx, c)
+	}
+	current := 0
+	if c.Quantity != nil {
+		current = *c.Quantity
+	}
+	next := current + qty
+	if next < 0 {
+		next = 0
+	}
+	c.Quantity = &next
+	return s.components.UpdateComponentInventory(ctx, c)
+}
+
+func (s *Service) LookupVendorPartID(ctx context.Context, vendor, partID string) (sourcing.SupplierOffer, error) {
+	svc, err := s.resolveSourcingService(ctx)
+	if err != nil {
+		return sourcing.SupplierOffer{}, err
+	}
+	return svc.LookupByVendorPartID(ctx, vendor, partID)
+}
+
+func (s *Service) resolveSourcingService(ctx context.Context) (*sourcing.Service, error) {
+	if s.supplierConfig != nil {
+		return s.supplierConfig.BuildSourcingService(ctx)
+	}
+	if s.sourcing != nil {
+		return s.sourcing, nil
+	}
+	return nil, fmt.Errorf("sourcing not configured")
+}
+
+func (s *Service) ResolveComponentFromOffer(ctx context.Context, offer sourcing.SupplierOffer) (domain.Component, error) {
+	if offer.Manufacturer != "" && offer.MPN != "" {
+		candidates, err := s.components.FindComponents(ctx, domain.ComponentFilter{
+			Manufacturer: offer.Manufacturer,
+			MPN:          offer.MPN,
+		})
+		if err == nil {
+			for _, c := range candidates {
+				if strings.EqualFold(c.Manufacturer, offer.Manufacturer) && strings.EqualFold(c.MPN, offer.MPN) {
+					return c, nil
+				}
+			}
+		}
+	}
+	return s.CreateComponent(ctx, domain.Component{
+		Category:     categoryFromCatalog(offer.Raw["parentCatalog"]),
+		MPN:          offer.MPN,
+		Manufacturer: offer.Manufacturer,
+		Package:      offer.Package,
+		Description:  offer.Description,
+	})
+}
+
+func categoryFromCatalog(parentCatalog string) domain.Category {
+	lower := strings.ToLower(parentCatalog)
+	switch {
+	case strings.Contains(lower, "resistor"):
+		return domain.CategoryResistor
+	case strings.Contains(lower, "capacitor"):
+		return domain.CategoryCapacitor
+	case strings.Contains(lower, "inductor") || strings.Contains(lower, "coil"):
+		return domain.CategoryInductor
+	default:
+		return domain.CategoryIntegratedCircuit
+	}
+}
+
 func (s *Service) CreateProject(ctx context.Context, project domain.Project) (domain.Project, error) {
 	if project.ID == "" {
 		project.ID = newID()

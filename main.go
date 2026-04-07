@@ -39,6 +39,9 @@ func startupLog(msg string) {
 //go:embed all:frontend/dist
 var assets embed.FS
 
+//go:embed build/appicon.png
+var appIcon []byte
+
 func main() {
 	startupLog("startup")
 
@@ -75,6 +78,7 @@ func main() {
 	appSvc := &AppService{App: backendApp}
 	appInstance := application.New(application.Options{
 		Name: "Trace",
+		Icon: appIcon,
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
 		},
