@@ -4,8 +4,8 @@ import (
 	"context"
 	"os"
 
-	"componentmanager/internal/domain"
-	"componentmanager/internal/kicad"
+	"trace/internal/domain"
+	"trace/internal/kicad"
 )
 
 func (a *App) ListKiCadProjects(roots []string, query string) ([]KiCadProjectCandidateResponse, error) {

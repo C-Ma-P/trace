@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"componentmanager/internal/domain"
-	"componentmanager/internal/domain/registry"
+	"trace/internal/domain"
+	"trace/internal/domain/registry"
 )
 
 type stubExporter struct {

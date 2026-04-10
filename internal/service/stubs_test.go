@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"componentmanager/internal/domain"
+	"trace/internal/domain"
 )
 
 type stubComponentRepo struct {

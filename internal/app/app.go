@@ -3,14 +3,14 @@ package app
 import (
 	"fmt"
 
-	"componentmanager/internal/assetsearch"
-	"componentmanager/internal/domain"
-	"componentmanager/internal/domain/registry"
-	"componentmanager/internal/ingest"
-	"componentmanager/internal/launcher"
-	"componentmanager/internal/phoneintake"
-	easyedaprovider "componentmanager/internal/providers/easyeda"
-	"componentmanager/internal/service"
+	"trace/internal/assetsearch"
+	"trace/internal/domain"
+	"trace/internal/domain/registry"
+	"trace/internal/ingest"
+	"trace/internal/launcher"
+	"trace/internal/phoneintake"
+	easyedaprovider "trace/internal/providers/easyeda"
+	"trace/internal/service"
 )
 
 type App struct {

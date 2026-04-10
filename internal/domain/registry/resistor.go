@@ -1,6 +1,6 @@
 package registry
 
-import "componentmanager/internal/domain"
+import "trace/internal/domain"
 
 const (
 	AttrResistanceOhms = "resistance_ohms"

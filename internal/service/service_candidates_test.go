@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"componentmanager/internal/domain"
-	"componentmanager/internal/service"
+	"trace/internal/domain"
+	"trace/internal/service"
 )
 
 // --- SelectComponentForRequirement ---

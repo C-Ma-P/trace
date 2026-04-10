@@ -4,6 +4,7 @@
     updateComponentMetadata,
     replaceComponentAttributes,
     getCategoryDefinitions,
+    formatAttributeValue,
     type Component,
     type CategoryInfo,
     type AttributeDefinitionInfo,
@@ -157,12 +158,11 @@
           <div class="spec-item">
             <span class="spec-label">
               {def.displayName}
-              {#if def.unit}<span class="unit-hint">({def.unit})</span>{/if}
             </span>
             <span class="spec-value">
               {#if attr}
                 {#if attr.valueType === 'number' && attr.number !== null}
-                  {attr.number}
+                  {formatAttributeValue(attr.number, def.unit)}
                 {:else if attr.valueType === 'text' && attr.text}
                   {attr.text}
                 {:else if attr.valueType === 'bool' && attr.bool !== null}
@@ -240,10 +240,6 @@
   .spec-label {
     font-size: 11px;
     font-weight: 500;
-    color: var(--color-text-muted);
-  }
-  .unit-hint {
-    font-weight: 400;
     color: var(--color-text-muted);
   }
   .spec-value {

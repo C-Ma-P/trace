@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"componentmanager/internal/assetsearch"
-	"componentmanager/internal/domain"
-	"componentmanager/internal/domain/registry"
-	"componentmanager/internal/ingest"
-	easyedaprovider "componentmanager/internal/providers/easyeda"
+	"trace/internal/assetsearch"
+	"trace/internal/domain"
+	"trace/internal/domain/registry"
+	"trace/internal/ingest"
+	easyedaprovider "trace/internal/providers/easyeda"
 )
 
 func (a *App) CreateComponentAsset(req CreateComponentAssetInput) (ComponentAssetResponse, error) {
@@ -302,17 +302,27 @@ func (a *App) ImportEasyEDAAssets(input ImportEasyEDAInput) (ImportEasyEDARespon
 		lcscID = *attr.Text
 	}
 
-	result, err := a.easyeda.ImportComponentAssets(context.Background(), easyedaprovider.ImportRequest{
+	ctx := context.Background()
+	existing, err := a.svc.ListComponentAssets(ctx, input.ComponentID)
+	if err != nil {
+		return ImportEasyEDAResponse{}, fmt.Errorf("listing existing assets: %w", err)
+	}
+	for _, asset := range existing {
+		if asset.Source == "easyeda" {
+			return ImportEasyEDAResponse{
+				Warnings: []string{"EasyEDA assets already imported for this component"},
+				Errors:   []string{},
+			}, nil
+		}
+	}
+
+	result, err := a.easyeda.ImportComponentAssets(ctx, easyedaprovider.ImportRequest{
 		ComponentID: input.ComponentID,
 		LCSCID:      lcscID,
 	})
 	if err != nil {
 		return ImportEasyEDAResponse{}, err
 	}
-
-	// Auto-select each newly imported asset so the component immediately shows
-	// the symbol, footprint, and 3D model without requiring a manual selection.
-	ctx := context.Background()
 	if result.SymbolAssetID != "" {
 		if selErr := a.svc.SetSelectedComponentAsset(ctx, input.ComponentID, domain.AssetTypeSymbol, result.SymbolAssetID); selErr != nil {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("auto-select symbol: %v", selErr))

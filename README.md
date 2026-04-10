@@ -6,13 +6,15 @@ Built with [Wails v3](https://v3.wails.io) (Go backend) + Svelte frontend, backe
 
 ## Setup
 
-**Database:** PostgreSQL required. Connection URL via `DATABASE_URL` env var, defaults to `postgres://localhost:5432/componentmanager?sslmode=disable`.
+**Database:** PostgreSQL required. Default connection: `postgres://meet:changeme@localhost:5432/trace?sslmode=disable` (override with `DATABASE_URL` env var).
 
 **On Ubuntu:**
 ```bash
 sudo systemctl start postgresql
-createdb componentmanager  # first time only
+sudo -u postgres createuser -P meet  # password: changeme
+createdb -U meet trace
 ```
+(`createdb` is a PostgreSQL tool; run as your current user)
 
 **Sourcing APIs** (optional, via env vars):
 - `DIGIKEY_CLIENT_ID`, `DIGIKEY_CLIENT_SECRET`
@@ -29,7 +31,7 @@ Unconfigured providers are skipped.
 
 **Dev mode:**
 ```bash
-DATABASE_URL=postgres://localhost:5432/componentmanager?sslmode=disable wails3 dev
+DATABASE_URL=postgres://localhost:5432/trace?sslmode=disable wails3 dev
 ```
 
 **Build:**

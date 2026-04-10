@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	"componentmanager/internal/domain"
-	"componentmanager/internal/domain/registry"
-	"componentmanager/internal/service"
+	"trace/internal/domain"
+	"trace/internal/domain/registry"
+	"trace/internal/service"
 )
 
 func TestSyncCanonicalAttributeDefinitions_AllCategoriesUpserted(t *testing.T) {

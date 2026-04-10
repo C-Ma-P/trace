@@ -7,12 +7,12 @@ import (
 
 	"fmt"
 
-	"componentmanager/internal/domain"
-	"componentmanager/internal/domain/registry"
-	"componentmanager/internal/kicad"
-	"componentmanager/internal/kicadconfig"
-	"componentmanager/internal/sourcing"
-	"componentmanager/internal/supplierconfig"
+	"trace/internal/domain"
+	"trace/internal/domain/registry"
+	"trace/internal/kicad"
+	"trace/internal/kicadconfig"
+	"trace/internal/sourcing"
+	"trace/internal/supplierconfig"
 )
 
 type Service struct {

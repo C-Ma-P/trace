@@ -1,6 +1,6 @@
 package registry
 
-import "componentmanager/internal/domain"
+import "trace/internal/domain"
 
 const (
 	AttrCapacitanceF  = "capacitance_f"

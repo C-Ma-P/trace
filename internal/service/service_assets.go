@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"componentmanager/internal/domain"
+	"trace/internal/domain"
 )
 
 func (s *Service) CreateComponentAsset(ctx context.Context, asset domain.ComponentAsset) (domain.ComponentAsset, error) {

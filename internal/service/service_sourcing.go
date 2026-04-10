@@ -6,8 +6,8 @@ import (
 
 	"fmt"
 
-	"componentmanager/internal/domain"
-	"componentmanager/internal/sourcing"
+	"trace/internal/domain"
+	"trace/internal/sourcing"
 )
 
 func (s *Service) LookupVendorPartID(ctx context.Context, vendor, partID string) (sourcing.SupplierOffer, error) {

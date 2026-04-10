@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"componentmanager/internal/assetsearch"
+	"trace/internal/assetsearch"
 )
 
 // SnapEDA is a stub provider for snapeda.com.

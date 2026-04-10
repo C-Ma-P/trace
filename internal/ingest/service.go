@@ -14,7 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"componentmanager/internal/domain"
+	"trace/internal/domain"
 )
 
 // maxExtractedFileSize is the maximum allowed size for a single file extracted

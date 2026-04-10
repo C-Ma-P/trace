@@ -43,8 +43,8 @@
 <div class="list-header">
   <div class="list-title-row">
     <h2 class="list-title">Components</h2>
-    <button class="btn btn-primary btn-sm" onclick={() => oncreate?.()}>
-      + New
+    <button class="btn btn-ghost btn-sm add-btn" onclick={() => oncreate?.()}>
+      +
     </button>
   </div>
   <div class="filter-row">
@@ -218,5 +218,15 @@
   }
   .item-qty {
     margin-left: auto;
+  }
+  .add-btn {
+    font-size: 18px;
+    font-weight: 300;
+    line-height: 1;
+    padding: 2px 8px;
+    color: var(--color-text-secondary);
+  }
+  .add-btn:hover {
+    color: var(--color-text-primary);
   }
 </style>

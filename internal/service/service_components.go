@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"componentmanager/internal/domain"
-	"componentmanager/internal/domain/registry"
+	"trace/internal/domain"
+	"trace/internal/domain/registry"
 )
 
 func (s *Service) CreateComponent(ctx context.Context, component domain.Component) (domain.Component, error) {

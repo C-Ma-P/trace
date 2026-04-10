@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"componentmanager/internal/domain"
+	"trace/internal/domain"
 )
 
 type BagRepository struct {

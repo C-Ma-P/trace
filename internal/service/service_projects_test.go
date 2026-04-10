@@ -5,10 +5,10 @@ import (
 	"errors"
 	"testing"
 
-	"componentmanager/internal/domain"
-	"componentmanager/internal/domain/registry"
-	"componentmanager/internal/kicad"
-	"componentmanager/internal/service"
+	"trace/internal/domain"
+	"trace/internal/domain/registry"
+	"trace/internal/kicad"
+	"trace/internal/service"
 )
 
 func TestCreateProject_ValidConstraints_Persisted(t *testing.T) {

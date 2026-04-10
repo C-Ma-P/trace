@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"componentmanager/internal/domain"
+	"trace/internal/domain"
 )
 
 func (a *App) ListComponents(filter ComponentFilterInput) ([]ComponentResponse, error) {

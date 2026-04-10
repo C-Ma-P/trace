@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"componentmanager/internal/paths"
+	"trace/internal/paths"
 )
 
 const maxRecentProjects = 10

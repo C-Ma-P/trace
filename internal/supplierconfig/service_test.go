@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"componentmanager/internal/secretstore"
+	"trace/internal/secretstore"
 )
 
 type fakePreferenceRepo struct {

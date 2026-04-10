@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"componentmanager/internal/assetsearch"
+	"trace/internal/assetsearch"
 )
 
 // UltraLibrarian is a stub provider for ultralibrarian.com.

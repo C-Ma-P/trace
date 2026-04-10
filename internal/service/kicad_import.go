@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"componentmanager/internal/domain"
-	"componentmanager/internal/kicad"
+	"trace/internal/domain"
+	"trace/internal/kicad"
 )
 
 const kicadImportSourceType = "kicad"

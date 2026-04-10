@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"componentmanager/internal/domain"
-	"componentmanager/internal/paths"
-	"componentmanager/internal/sourcing"
+	"trace/internal/domain"
+	"trace/internal/paths"
+	"trace/internal/sourcing"
 )
 
 func (a *App) ListProjects() ([]ProjectResponse, error) {

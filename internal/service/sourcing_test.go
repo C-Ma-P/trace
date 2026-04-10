@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"componentmanager/internal/domain"
-	"componentmanager/internal/service"
-	"componentmanager/internal/sourcing"
+	"trace/internal/domain"
+	"trace/internal/service"
+	"trace/internal/sourcing"
 )
 
 type capturingProvider struct {

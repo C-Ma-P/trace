@@ -3,8 +3,8 @@ package domain_test
 import (
 	"testing"
 
-	"componentmanager/internal/domain"
-	"componentmanager/internal/domain/registry"
+	"trace/internal/domain"
+	"trace/internal/domain/registry"
 )
 
 func strp(s string) *string { return &s }

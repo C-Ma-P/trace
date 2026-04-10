@@ -38,9 +38,7 @@
     </button>
   </nav>
 
-  {#if !collapsed}
-    <PhoneIntakePanel />
-  {/if}
+  <PhoneIntakePanel {collapsed} />
 
   <div class="sidebar-footer">
     <button
@@ -48,7 +46,9 @@
       title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
       onclick={() => (collapsed = !collapsed)}
     >
-      <span class="collapse-dots" class:rotated={collapsed}>⋮</span>
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="collapse-icon" class:flipped={collapsed} width="16" height="16">
+        <polyline points="10 4 6 8 10 12" />
+      </svg>
     </button>
   </div>
 </aside>
@@ -154,14 +154,11 @@
     color: var(--color-text-primary);
     background: var(--color-bg-sidebar-hover);
   }
-  .collapse-dots {
-    font-size: 18px;
-    line-height: 1;
+  .collapse-icon {
     display: block;
-    transform: rotate(0deg);
-    transition: transform 0.18s ease;
+    transition: transform 0.3s ease;
   }
-  .collapse-dots.rotated {
-    transform: rotate(90deg);
+  .collapse-icon.flipped {
+    transform: rotate(180deg);
   }
 </style>

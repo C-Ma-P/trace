@@ -13,21 +13,21 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/wailsapp/wails/v3/pkg/application"
 
-	"componentmanager/internal/app"
-	"componentmanager/internal/assetsearch"
-	"componentmanager/internal/assetsearch/providers"
-	"componentmanager/internal/domain/registry"
-	"componentmanager/internal/ingest"
-	"componentmanager/internal/kicad"
-	"componentmanager/internal/kicadconfig"
-	"componentmanager/internal/paths"
-	"componentmanager/internal/phoneintake"
-	easyedaprovider "componentmanager/internal/providers/easyeda"
-	"componentmanager/internal/secretstore"
-	"componentmanager/internal/service"
-	"componentmanager/internal/store/postgres"
-	"componentmanager/internal/supplierconfig"
-	"componentmanager/internal/windows"
+	"trace/internal/app"
+	"trace/internal/assetsearch"
+	"trace/internal/assetsearch/providers"
+	"trace/internal/domain/registry"
+	"trace/internal/ingest"
+	"trace/internal/kicad"
+	"trace/internal/kicadconfig"
+	"trace/internal/paths"
+	"trace/internal/phoneintake"
+	easyedaprovider "trace/internal/providers/easyeda"
+	"trace/internal/secretstore"
+	"trace/internal/service"
+	"trace/internal/store/postgres"
+	"trace/internal/supplierconfig"
+	"trace/internal/windows"
 )
 
 var startupTime = time.Now()
@@ -45,7 +45,7 @@ var appIcon []byte
 func main() {
 	startupLog("startup")
 
-	dsn := "postgres://meet:changeme@localhost:5432/componentmanager?sslmode=disable"
+	dsn := "postgres://meet:changeme@localhost:5432/trace?sslmode=disable"
 	if d := os.Getenv("DATABASE_URL"); d != "" {
 		dsn = d
 	}
@@ -53,6 +53,7 @@ func main() {
 	var backendApp *app.App
 	svc, assetSearchSvc, ingestSvc, easyedaSvc, db, initErr := initService(dsn)
 	if initErr != nil {
+		log.Printf("[startup] init failed: %v", initErr)
 		backendApp = app.NewFailed(initErr.Error())
 	} else {
 		defer db.Close()

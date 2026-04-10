@@ -20,19 +20,19 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 
-	"componentmanager/internal/domain"
-	"componentmanager/internal/domain/registry"
-	"componentmanager/internal/launcher"
-	"componentmanager/internal/paths"
-	"componentmanager/internal/service"
-	"componentmanager/internal/store/postgres"
+	"trace/internal/domain"
+	"trace/internal/domain/registry"
+	"trace/internal/launcher"
+	"trace/internal/paths"
+	"trace/internal/service"
+	"trace/internal/store/postgres"
 )
 
 func main() {
 	wipe := flag.Bool("wipe", false, "wipe DB + local Trace project state before seeding")
 	flag.Parse()
 
-	dsn := "postgres://meet:changeme@localhost:5432/componentmanager?sslmode=disable"
+	dsn := "postgres://meet:changeme@localhost:5432/trace?sslmode=disable"
 	if d := os.Getenv("DATABASE_URL"); d != "" {
 		dsn = d
 	}

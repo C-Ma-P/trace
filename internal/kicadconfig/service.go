@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"componentmanager/internal/domain"
+	"trace/internal/domain"
 )
 
 const (

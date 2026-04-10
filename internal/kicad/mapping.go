@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"componentmanager/internal/domain"
-	"componentmanager/internal/domain/registry"
+	"trace/internal/domain"
+	"trace/internal/domain/registry"
 )
 
 var (

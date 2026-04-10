@@ -831,6 +831,43 @@ export function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
+export function formatAttributeValue(value: number, unit: string): string {
+  if (!unit) return trimNumber(value);
+  switch (unit) {
+    case 'ohm':
+      return engineering(value, [[1e6, 'MΩ'], [1e3, 'kΩ'], [1, 'Ω'], [1e-3, 'mΩ']]);
+    case 'F':
+      return engineering(value, [[1, 'F'], [1e-3, 'mF'], [1e-6, 'µF'], [1e-9, 'nF'], [1e-12, 'pF']]);
+    case 'H':
+      return engineering(value, [[1, 'H'], [1e-3, 'mH'], [1e-6, 'µH'], [1e-9, 'nH']]);
+    case 'V':
+      return trimNumber(value) + 'V';
+    case 'W':
+      return trimNumber(value) + 'W';
+    case 'A':
+      return trimNumber(value) + 'A';
+    case 'percent':
+      return trimNumber(value) + '%';
+    case 'ppm/C':
+      return trimNumber(value) + ' ppm/°C';
+    default:
+      return trimNumber(value) + ' ' + unit;
+  }
+}
+
+function engineering(value: number, prefixes: [number, string][]): string {
+  const abs = Math.abs(value);
+  for (const [divisor, suffix] of prefixes) {
+    if (abs >= divisor) return trimNumber(value / divisor) + suffix;
+  }
+  const [divisor, suffix] = prefixes[prefixes.length - 1];
+  return trimNumber(value / divisor) + suffix;
+}
+
+function trimNumber(value: number): string {
+  return parseFloat(value.toFixed(6)).toString();
+}
+
 export function categoryDisplayName(
   categories: CategoryInfo[],
   value: string

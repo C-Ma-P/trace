@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	"componentmanager/internal/domain"
-	"componentmanager/internal/domain/registry"
+	"trace/internal/domain"
+	"trace/internal/domain/registry"
 )
 
 func numConstraint(key string, op domain.Operator, v float64, unit string) domain.RequirementConstraint {

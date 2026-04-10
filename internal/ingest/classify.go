@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"componentmanager/internal/domain"
+	"trace/internal/domain"
 )
 
 // classifyFile determines the asset type for a file based on its extension.

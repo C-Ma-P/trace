@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	"componentmanager/internal/domain"
-	"componentmanager/internal/secretstore"
-	"componentmanager/internal/sourcing"
+	"trace/internal/domain"
+	"trace/internal/secretstore"
+	"trace/internal/sourcing"
 )
 
 const (

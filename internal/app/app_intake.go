@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"componentmanager/internal/domain"
-	"componentmanager/internal/phoneintake"
+	"trace/internal/domain"
+	"trace/internal/phoneintake"
 )
 
 // SetIntakeServer sets the phone intake server reference for status queries.

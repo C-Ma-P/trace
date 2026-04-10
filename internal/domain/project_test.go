@@ -3,7 +3,7 @@ package domain_test
 import (
 	"testing"
 
-	"componentmanager/internal/domain"
+	"trace/internal/domain"
 )
 
 func strPtr(s string) *string { return &s }

@@ -12,7 +12,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 
-	"componentmanager/internal/app"
+	"trace/internal/app"
 )
 
 // Controller manages window lifecycle for the application.

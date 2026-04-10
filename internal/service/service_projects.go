@@ -5,8 +5,8 @@ import (
 	"sort"
 	"time"
 
-	"componentmanager/internal/domain"
-	"componentmanager/internal/domain/registry"
+	"trace/internal/domain"
+	"trace/internal/domain/registry"
 )
 
 func (s *Service) CreateProject(ctx context.Context, project domain.Project) (domain.Project, error) {

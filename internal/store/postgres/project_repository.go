@@ -9,7 +9,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 
-	"componentmanager/internal/domain"
+	"trace/internal/domain"
 )
 
 type ProjectRepository struct {

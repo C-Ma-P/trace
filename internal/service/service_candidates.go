@@ -6,7 +6,7 @@ import (
 
 	"fmt"
 
-	"componentmanager/internal/domain"
+	"trace/internal/domain"
 )
 
 // --- Part Candidates ---

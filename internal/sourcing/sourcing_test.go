@@ -10,8 +10,8 @@ import (
 	lcsc "github.com/PatrickWalther/go-lcsc"
 	mouser "github.com/PatrickWalther/go-mouser"
 
-	"componentmanager/internal/domain"
-	"componentmanager/internal/domain/registry"
+	"trace/internal/domain"
+	"trace/internal/domain/registry"
 )
 
 type stubProvider struct {

@@ -1,6 +1,6 @@
 package postgres
 
-import "componentmanager/internal/domain"
+import "trace/internal/domain"
 
 // attributeRow is a flat scan target for component_attributes rows.
 // It includes component_id for grouping results by component.

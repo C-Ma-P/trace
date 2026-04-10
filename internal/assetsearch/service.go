@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log"
 
-	"componentmanager/internal/domain"
-	"componentmanager/internal/ingest"
+	"trace/internal/domain"
+	"trace/internal/ingest"
 )
 
 // Service orchestrates asset search and import across providers.

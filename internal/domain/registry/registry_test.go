@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	"componentmanager/internal/domain"
-	"componentmanager/internal/domain/registry"
+	"trace/internal/domain"
+	"trace/internal/domain/registry"
 )
 
 func numAttr(key string, v float64, unit string) domain.AttributeValue {

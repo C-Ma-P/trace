@@ -5,6 +5,8 @@
   import QRCode from 'qrcode';
   import { getPhoneIntakeInfo, setPhoneIntakeEnabled, type PhoneIntakeInfo } from '../backend';
 
+  let { collapsed = false }: { collapsed?: boolean } = $props();
+
   let info: PhoneIntakeInfo | null = $state(null);
   let localActive = $state(false); // optimistic, synced from info.active
   let toggling = $state(false);
@@ -70,71 +72,65 @@
 
 {#if info?.available}
   <div class="intake-section">
-    <div class="intake-header">
-      <button
-        class="intake-expand"
-        title="Phone Intake"
-        disabled
-      >
-        <svg viewBox="0 0 20 20" fill="currentColor" class="intake-icon">
-          <path d="M7 2a2 2 0 00-2 2v12a2 2 0 002 2h6a2 2 0 002-2V4a2 2 0 00-2-2H7zm3 14a1 1 0 100-2 1 1 0 000 2z" />
-        </svg>
-        <span class="intake-label">Phone Intake</span>
-      </button>
-      <button
-        class="server-toggle-btn"
-        onclick={toggle}
-        disabled={toggling}
-        title={localActive ? 'Turn off phone intake' : 'Turn on phone intake'}
-      >
-        <span class="toggle-track" class:on={localActive}>
-          <span class="toggle-thumb"></span>
-        </span>
-      </button>
+    <div class="intake-collapse-clip" class:open={!collapsed}>
+      {#if localActive}
+        <div class="intake-panel" transition:slide={{ duration: 220, easing: cubicOut }}>
+          <div class="connect-info">
+            <div class="intake-url-row">
+              <code class="intake-url">{info.url}</code>
+              <button class="copy-btn" onclick={copyURL} title="Copy URL">
+                <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12">
+                  <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"/>
+                  <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"/>
+                </svg>
+              </button>
+            </div>
+            <div class="qr-wrap">
+              {#if qrDataURL}
+                <img src={qrDataURL} alt="Scan to open phone intake" width="164" height="164" />
+              {/if}
+            </div>
+            <div class="intake-hint">Open on your phone (same Wi-Fi)</div>
+          </div>
+
+          {#if info.recent.length > 0}
+            <div class="recent-header">Recent</div>
+            <div class="recent-list">
+              {#each info.recent.slice(0, 8) as ev}
+                <div class="recent-item" class:error={!ev.success}>
+                  <span class="recent-time">{formatTime(ev.timestamp)}</span>
+                  <span class="recent-name">{ev.displayName || ev.qrData}</span>
+                  <span class="recent-action">
+                    {#if ev.action === 'submit' && ev.success}
+                      → {ev.newQuantity ?? '?'}
+                    {:else if ev.action === 'lookup'}
+                      scanned
+                    {:else}
+                      {ev.error || 'error'}
+                    {/if}
+                  </span>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {/if}
     </div>
 
-    {#if localActive}
-      <div class="intake-panel" transition:slide={{ duration: 220, easing: cubicOut }}>
-        <div class="connect-info">
-          <div class="intake-url-row">
-            <code class="intake-url">{info.url}</code>
-            <button class="copy-btn" onclick={copyURL} title="Copy URL">
-              <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12">
-                <path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"/>
-                <path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"/>
-              </svg>
-            </button>
-          </div>
-          <div class="qr-wrap">
-            {#if qrDataURL}
-              <img src={qrDataURL} alt="Scan to open phone intake" width="164" height="164" />
-            {/if}
-          </div>
-          <div class="intake-hint">Open on your phone (same Wi-Fi)</div>
-        </div>
-
-        {#if info.recent.length > 0}
-          <div class="recent-header">Recent</div>
-          <div class="recent-list">
-            {#each info.recent.slice(0, 8) as ev}
-              <div class="recent-item" class:error={!ev.success}>
-                <span class="recent-time">{formatTime(ev.timestamp)}</span>
-                <span class="recent-name">{ev.displayName || ev.qrData}</span>
-                <span class="recent-action">
-                  {#if ev.action === 'submit' && ev.success}
-                    → {ev.newQuantity ?? '?'}
-                  {:else if ev.action === 'lookup'}
-                    scanned
-                  {:else}
-                    {ev.error || 'error'}
-                  {/if}
-                </span>
-              </div>
-            {/each}
-          </div>
-        {/if}
-      </div>
-    {/if}
+    <button
+      class="intake-header"
+      onclick={toggle}
+      disabled={toggling}
+      title={localActive ? 'Turn off phone intake' : 'Turn on phone intake'}
+    >
+      <svg viewBox="0 0 20 20" fill="currentColor" class="intake-icon" class:on={localActive}>
+        <path d="M7 2a2 2 0 00-2 2v12a2 2 0 002 2h6a2 2 0 002-2V4a2 2 0 00-2-2H7zm3 14a1 1 0 100-2 1 1 0 000 2z" />
+      </svg>
+      <span class="intake-label" class:on={localActive}>Phone Intake</span>
+      <span class="toggle-track" class:on={localActive}>
+        <span class="toggle-thumb"></span>
+      </span>
+    </button>
   </div>
 {/if}
 
@@ -143,70 +139,66 @@
     padding: 4px 8px;
   }
 
-  /* Header row: expand button + inline toggle */
+  /* Header row — single clickable button */
   .intake-header {
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 0 2px;
-  }
-  .intake-expand {
-    display: flex;
-    align-items: center;
     gap: 8px;
-    flex: 1;
-    min-width: 0;
-    padding: 7px 8px;
+    width: 100%;
+    padding: 7px 10px;
     border-radius: var(--radius-sm);
     color: var(--color-text-secondary);
     font-size: 13px;
     font-weight: 500;
     text-align: left;
+    cursor: pointer;
+    transition: background 0.1s;
     white-space: nowrap;
     overflow: hidden;
-    cursor: default;
   }
-  .intake-expand:disabled {
-    opacity: 1;
+  .intake-header:hover:not(:disabled) {
+    background: var(--color-bg-sidebar-hover);
+  }
+  .intake-header:disabled {
+    opacity: 0.5;
+    cursor: default;
   }
   .intake-icon {
     width: 16px;
     height: 16px;
     flex-shrink: 0;
+    color: var(--color-text-muted);
+    transition: color 0.15s;
+  }
+  .intake-icon.on {
+    color: var(--color-success);
+    filter: drop-shadow(0 0 4px rgba(52, 211, 153, 0.4));
   }
   .intake-label {
+    flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .intake-label.on {
+    color: var(--color-text-primary);
   }
 
   /* Inline server toggle */
-  .server-toggle-btn {
-    flex-shrink: 0;
-    padding: 4px 6px;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    transition: background 0.1s;
-  }
-  .server-toggle-btn:hover:not(:disabled) {
-    background: var(--color-bg-sidebar-hover);
-  }
-  .server-toggle-btn:disabled {
-    opacity: 0.5;
-    cursor: default;
-  }
   .toggle-track {
     position: relative;
     display: block;
     width: 28px;
     height: 16px;
+    flex-shrink: 0;
     border-radius: 8px;
     background: var(--color-bg-muted);
     border: 1px solid var(--color-border);
     transition: background 0.15s, border-color 0.15s;
   }
   .toggle-track.on {
-    background: var(--color-accent);
-    border-color: var(--color-accent);
+    background: var(--color-success);
+    border-color: var(--color-success);
   }
   .toggle-thumb {
     position: absolute;
@@ -223,13 +215,28 @@
     background: #fff;
   }
 
-  .intake-panel {
-    padding: 2px 10px 8px;
+  .intake-collapse-clip {
     overflow: hidden;
-    will-change: height;
+    max-height: 600px;
+    transition: max-height 0.18s ease;
+  }
+  .intake-collapse-clip:not(.open) {
+    max-height: 0;
+    transition: max-height 0.18s ease 0.18s;
   }
 
-  /* Connect info block — slides in/out via Svelte transition */
+  .intake-panel {
+    padding: 2px 10px 8px;
+    min-width: 180px;
+    transform: translateX(-100%);
+    transition: transform 0.18s ease;
+  }
+  .intake-collapse-clip.open .intake-panel {
+    transform: translateX(0);
+    transition-delay: 0.05s;
+  }
+
+  /* Connect info block */
   .connect-info {
     margin-bottom: 8px;
     overflow: hidden;
