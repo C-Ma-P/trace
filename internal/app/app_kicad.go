@@ -2,15 +2,10 @@ package app
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"os"
-	"path/filepath"
-	"time"
 
 	"componentmanager/internal/domain"
 	"componentmanager/internal/kicad"
-	"componentmanager/internal/paths"
 )
 
 func (a *App) ListKiCadProjects(roots []string, query string) ([]KiCadProjectCandidateResponse, error) {
@@ -74,38 +69,6 @@ func (a *App) ImportKiCadProject(input KiCadImportCommitInput) (ProjectResponse,
 		_ = a.launcher.TouchProject(project.ID, project.Name, project.Description)
 	}
 	return projectToResponse(project), nil
-}
-
-func createProjectDiskState(projectID, name, description string) (string, error) {
-	projectsDir, err := paths.EnsureProjectsDir()
-	if err != nil {
-		return "", err
-	}
-	projectDir := filepath.Join(projectsDir, projectID)
-	if err := os.MkdirAll(projectDir, 0o755); err != nil {
-		return "", fmt.Errorf("create project dir: %w", err)
-	}
-	metadataPath := filepath.Join(projectDir, "project.json")
-	metadataBytes, err := json.Marshal(struct {
-		ID          string `json:"id"`
-		Name        string `json:"name"`
-		Description string `json:"description"`
-		CreatedAt   string `json:"createdAt"`
-	}{
-		ID:          projectID,
-		Name:        name,
-		Description: description,
-		CreatedAt:   time.Now().UTC().Format(time.RFC3339),
-	})
-	if err != nil {
-		_ = os.RemoveAll(projectDir)
-		return "", err
-	}
-	if err := os.WriteFile(metadataPath, metadataBytes, 0o644); err != nil {
-		_ = os.RemoveAll(projectDir)
-		return "", fmt.Errorf("write project metadata: %w", err)
-	}
-	return projectDir, nil
 }
 
 func kiCadCandidateToResponse(candidate kicad.ProjectCandidate) KiCadProjectCandidateResponse {

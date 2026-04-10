@@ -2,6 +2,7 @@
   import AddFromFileModal from './AddFromFileModal.svelte';
   import ImportEasyEDAModal from './ImportEasyEDAModal.svelte';
   import SearchOnlineModal from './SearchOnlineModal.svelte';
+  import { ASSET_TYPE_LABELS } from '../constants';
   import {
     selectComponentAsset,
     clearSelectedComponentAsset,
@@ -39,12 +40,7 @@
     selectedId: string | null;
   };
 
-  const typeLabels: Record<string, string> = {
-    symbol: 'Symbol',
-    footprint: 'Footprint',
-    '3d_model': '3D Model',
-    datasheet: 'Datasheet',
-  };
+  const typeLabels = ASSET_TYPE_LABELS;
 
   const typeIcons: Record<string, string> = {
     symbol: '⏚',

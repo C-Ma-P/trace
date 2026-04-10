@@ -63,6 +63,38 @@ func (a *App) CreateProject(req CreateProjectInput) (ProjectResponse, error) {
 	return projectToResponse(p), nil
 }
 
+func createProjectDiskState(projectID, name, description string) (string, error) {
+	projectsDir, err := paths.EnsureProjectsDir()
+	if err != nil {
+		return "", err
+	}
+	projectDir := filepath.Join(projectsDir, projectID)
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		return "", fmt.Errorf("create project dir: %w", err)
+	}
+	metadataPath := filepath.Join(projectDir, "project.json")
+	metadataBytes, err := json.Marshal(struct {
+		ID          string `json:"id"`
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		CreatedAt   string `json:"createdAt"`
+	}{
+		ID:          projectID,
+		Name:        name,
+		Description: description,
+		CreatedAt:   time.Now().UTC().Format(time.RFC3339),
+	})
+	if err != nil {
+		_ = os.RemoveAll(projectDir)
+		return "", err
+	}
+	if err := os.WriteFile(metadataPath, metadataBytes, 0o644); err != nil {
+		_ = os.RemoveAll(projectDir)
+		return "", fmt.Errorf("write project metadata: %w", err)
+	}
+	return projectDir, nil
+}
+
 func (a *App) CreateBlankProject() (ProjectResponse, error) {
 	if err := a.checkReady(); err != nil {
 		return ProjectResponse{}, err
@@ -72,34 +104,9 @@ func (a *App) CreateBlankProject() (ProjectResponse, error) {
 	projectName := "Untitled Project"
 	projectDescription := ""
 
-	projectsDir, err := paths.EnsureProjectsDir()
+	projectDir, err := createProjectDiskState(projectID, projectName, projectDescription)
 	if err != nil {
 		return ProjectResponse{}, err
-	}
-	projectDir := filepath.Join(projectsDir, projectID)
-	if err := os.MkdirAll(projectDir, 0o755); err != nil {
-		return ProjectResponse{}, fmt.Errorf("create project dir: %w", err)
-	}
-
-	metadataPath := filepath.Join(projectDir, "project.json")
-	metadataBytes, err := json.Marshal(struct {
-		ID          string `json:"id"`
-		Name        string `json:"name"`
-		Description string `json:"description"`
-		CreatedAt   string `json:"createdAt"`
-	}{
-		ID:          projectID,
-		Name:        projectName,
-		Description: projectDescription,
-		CreatedAt:   time.Now().UTC().Format(time.RFC3339),
-	})
-	if err != nil {
-		_ = os.RemoveAll(projectDir)
-		return ProjectResponse{}, err
-	}
-	if err := os.WriteFile(metadataPath, metadataBytes, 0o644); err != nil {
-		_ = os.RemoveAll(projectDir)
-		return ProjectResponse{}, fmt.Errorf("write project metadata: %w", err)
 	}
 
 	p, err := a.svc.CreateProject(context.Background(), domain.Project{
@@ -130,34 +137,9 @@ func (a *App) CreateProjectWithDisk(req CreateProjectInput) (ProjectResponse, er
 
 	projectID := newID()
 
-	projectsDir, err := paths.EnsureProjectsDir()
+	projectDir, err := createProjectDiskState(projectID, name, description)
 	if err != nil {
 		return ProjectResponse{}, err
-	}
-	projectDir := filepath.Join(projectsDir, projectID)
-	if err := os.MkdirAll(projectDir, 0o755); err != nil {
-		return ProjectResponse{}, fmt.Errorf("create project dir: %w", err)
-	}
-
-	metadataPath := filepath.Join(projectDir, "project.json")
-	metadataBytes, err := json.Marshal(struct {
-		ID          string `json:"id"`
-		Name        string `json:"name"`
-		Description string `json:"description"`
-		CreatedAt   string `json:"createdAt"`
-	}{
-		ID:          projectID,
-		Name:        name,
-		Description: description,
-		CreatedAt:   time.Now().UTC().Format(time.RFC3339),
-	})
-	if err != nil {
-		_ = os.RemoveAll(projectDir)
-		return ProjectResponse{}, err
-	}
-	if err := os.WriteFile(metadataPath, metadataBytes, 0o644); err != nil {
-		_ = os.RemoveAll(projectDir)
-		return ProjectResponse{}, fmt.Errorf("write project metadata: %w", err)
 	}
 
 	p, err := a.svc.CreateProject(context.Background(), domain.Project{

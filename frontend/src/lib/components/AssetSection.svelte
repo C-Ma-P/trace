@@ -2,6 +2,7 @@
   import AddFromFileModal from './AddFromFileModal.svelte';
   import ImportEasyEDAModal from './ImportEasyEDAModal.svelte';
   import SearchOnlineModal from './SearchOnlineModal.svelte';
+  import { ASSET_TYPE_LABELS } from '../constants';
   import {
     selectComponentAsset,
     clearSelectedComponentAsset,
@@ -33,14 +34,7 @@
     onupdated?: () => void;
   } = $props();
 
-  const typeLabels: Record<string, string> = {
-    symbol: 'Symbol',
-    footprint: 'Footprint',
-    '3d_model': '3D Model',
-    datasheet: 'Datasheet',
-  };
-
-  let typeLabel = $derived(typeLabels[activeType] ?? activeType);
+  let typeLabel = $derived(ASSET_TYPE_LABELS[activeType] ?? activeType);
 
   let selectedAsset = $derived(
     activeType === 'symbol' ? selectedSymbolAsset :

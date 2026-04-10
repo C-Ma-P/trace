@@ -1,5 +1,6 @@
 <script lang="ts">
   import Modal from '../ui/Modal.svelte';
+  import { ASSET_TYPE_LABELS } from '../constants';
   import { ingestComponentAssets, validateAssetPath, type IngestResult, type ValidateAssetPathResult } from '../backend';
   import { pickAssetFile, pickAssetDir } from '../windowService';
   import FileArrowDown from '../icons/FileArrowDown.svelte';
@@ -93,12 +94,7 @@
     onclose?.();
   }
 
-  const typeLabels: Record<string, string> = {
-    symbol: 'Symbol',
-    footprint: 'Footprint',
-    '3d_model': '3D Model',
-    datasheet: 'Datasheet',
-  };
+  const typeLabels = ASSET_TYPE_LABELS;
 </script>
 
 <Modal {open} title="Import Component Assets" onclose={handleClose}>
