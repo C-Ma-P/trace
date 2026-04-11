@@ -41,7 +41,7 @@ import (
 const (
 	mdnsIPv4Addr         = "224.0.0.251"
 	mdnsMcastPort        = 5353
-	mdnsHostTTL          = 120             // seconds; per RFC 6762 §11.3
+	mdnsHostTTL          = 120 // seconds; per RFC 6762 §11.3
 	mdnsAnnounceInterval = 25 * time.Second
 	mdnsCheckDelay       = 750 * time.Millisecond
 	mdnsCheckTimeout     = 3 * time.Second
@@ -101,9 +101,19 @@ func startMDNS(lanIP string, emit activity.Emitter) func() {
 			log.Printf("[phone-intake] mDNS: multicast join failed on %s: %v", iface.Name, err)
 			continue
 		}
-		// Pin the outgoing multicast interface so responses have the right source IP.
-		if err := ipv4.NewPacketConn(conn).SetMulticastInterface(&iface); err != nil {
+		// Pin the outgoing multicast interface so responses leave from the right
+		// source IP, set TTL=255 (required by RFC 6762 §11.4 for proper
+		// link-local mDNS semantics), and enable loopback so the self-check
+		// receives our own announcements on the same host.
+		pc := ipv4.NewPacketConn(conn)
+		if err := pc.SetMulticastInterface(&iface); err != nil {
 			log.Printf("[phone-intake] mDNS: SetMulticastInterface on %s failed (non-fatal): %v", iface.Name, err)
+		}
+		if err := pc.SetMulticastTTL(255); err != nil {
+			log.Printf("[phone-intake] mDNS: SetMulticastTTL on %s failed (non-fatal): %v", iface.Name, err)
+		}
+		if err := pc.SetMulticastLoopback(true); err != nil {
+			log.Printf("[phone-intake] mDNS: SetMulticastLoopback on %s failed (non-fatal): %v", iface.Name, err)
 		}
 		active = append(active, bound{iface, conn})
 	}
@@ -300,6 +310,19 @@ func verifyMDNSResolution(lanIP string, checkIface net.Interface, emit activity.
 	}
 	defer conn.Close()
 
+	// Explicitly enable multicast loopback so we receive our own response on
+	// the same host, and set TTL=255 consistent with the responder sockets.
+	checkPC := ipv4.NewPacketConn(conn)
+	if err := checkPC.SetMulticastInterface(&checkIface); err != nil {
+		log.Printf("[phone-intake] mDNS self-check: SetMulticastInterface failed (non-fatal): %v", err)
+	}
+	if err := checkPC.SetMulticastLoopback(true); err != nil {
+		log.Printf("[phone-intake] mDNS self-check: SetMulticastLoopback failed (non-fatal): %v", err)
+	}
+	if err := checkPC.SetMulticastTTL(255); err != nil {
+		log.Printf("[phone-intake] mDNS self-check: SetMulticastTTL failed (non-fatal): %v", err)
+	}
+
 	// Build a standard mDNS query (ID = 0, QU bit not set → expect multicast response).
 	query := new(dns.Msg)
 	query.SetQuestion(stableHostname+".", dns.TypeA)
@@ -308,7 +331,7 @@ func verifyMDNSResolution(lanIP string, checkIface net.Interface, emit activity.
 
 	packed, err := query.Pack()
 	if err != nil {
-		emit.Emit(activity.NewPhoneEvent(activity.SeverityWarning, "mdns-check-failed",
+		emit.Emit(activity.NewPhoneEvent(activity.SeverityWarning, "mdns-check-send-failed",
 			"mDNS self-check: failed to build query",
 			map[string]any{"ip": lanIP, "error": err.Error()}))
 		return
@@ -317,13 +340,14 @@ func verifyMDNSResolution(lanIP string, checkIface net.Interface, emit activity.
 	if _, err := conn.WriteToUDP(packed, mdnsGroupUDPAddr); err != nil {
 		msg := fmt.Sprintf("mDNS self-check: failed to send query on %s: %v", checkIface.Name, err)
 		log.Printf("[phone-intake] %s", msg)
-		emit.Emit(activity.NewPhoneEvent(activity.SeverityWarning, "mdns-check-failed", msg,
+		emit.Emit(activity.NewPhoneEvent(activity.SeverityWarning, "mdns-check-send-failed", msg,
 			map[string]any{"ip": lanIP, "iface": checkIface.Name, "error": err.Error()}))
 		return
 	}
 
 	deadline := time.Now().Add(mdnsCheckTimeout)
 	buf := make([]byte, 65535)
+	var badAnswerIP net.IP // non-nil when trace.local resolved but to the wrong address
 	for time.Now().Before(deadline) {
 		_ = conn.SetReadDeadline(deadline)
 		n, _, err := conn.ReadFromUDP(buf)
@@ -346,23 +370,40 @@ func verifyMDNSResolution(lanIP string, checkIface net.Interface, emit activity.
 			if len(name) > 0 && name[len(name)-1] == '.' {
 				name = name[:len(name)-1]
 			}
-			if name == stableHostname && a.A.Equal(net.ParseIP(lanIP)) {
+			if name != stableHostname {
+				continue
+			}
+			if a.A.Equal(net.ParseIP(lanIP)) {
 				msg := fmt.Sprintf("mDNS self-check: %s → %s ✓", stableHostname, a.A)
 				log.Printf("[phone-intake] %s", msg)
 				emit.Emit(activity.NewPhoneEvent(activity.SeveritySuccess, "mdns-check-ok", msg,
 					map[string]any{"ip": lanIP, "iface": checkIface.Name, "resolvedIP": a.A.String()}))
 				return
 			}
+			// Correct name but unexpected IP — remember and keep waiting in
+			// case our own correct answer still arrives.
+			badAnswerIP = a.A
 		}
 	}
 
+	if badAnswerIP != nil {
+		msg := fmt.Sprintf(
+			"mDNS self-check: %s resolved to %s (want %s) — possible mDNS conflict on the network",
+			stableHostname, badAnswerIP, lanIP,
+		)
+		log.Printf("[phone-intake] %s", msg)
+		emit.Emit(activity.NewPhoneEvent(activity.SeverityWarning, "mdns-check-bad-answer", msg,
+			map[string]any{"ip": lanIP, "iface": checkIface.Name, "resolvedIP": badAnswerIP.String()}))
+		return
+	}
+
 	msg := fmt.Sprintf(
-		"mDNS self-check: %s did not resolve to %s within %s — "+
+		"mDNS self-check: no response for %s within %s — "+
 			"trace.local may not be reachable from phones on this network",
-		stableHostname, lanIP, mdnsCheckTimeout,
+		stableHostname, mdnsCheckTimeout,
 	)
 	log.Printf("[phone-intake] %s", msg)
-	emit.Emit(activity.NewPhoneEvent(activity.SeverityWarning, "mdns-check-failed", msg,
+	emit.Emit(activity.NewPhoneEvent(activity.SeverityWarning, "mdns-check-timeout", msg,
 		map[string]any{"ip": lanIP, "iface": checkIface.Name}))
 }
 
