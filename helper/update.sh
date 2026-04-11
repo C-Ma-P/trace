@@ -1,5 +1,5 @@
 #!/bin/bash
 
-git add /home/meet/trace/*
+git add ./*
 git commit -m updates
 git push

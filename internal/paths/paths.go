@@ -62,6 +62,18 @@ func EnsureTraceHome() (string, error) {
 	return home, nil
 }
 
+func EnsurePhoneIntakePKIDir() (string, error) {
+	home, err := TraceHomeDir()
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(home, "phoneintake-pki")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("create phoneintake pki dir: %w", err)
+	}
+	return dir, nil
+}
+
 func EnsureProjectsDir() (string, error) {
 	projects, err := ProjectsDir()
 	if err != nil {

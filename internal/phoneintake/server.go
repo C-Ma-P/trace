@@ -25,31 +25,35 @@ const (
 	defaultPort     = 8741
 	maxRecentEvents = 50
 	maxPendingScans = 500
+	stableHostname  = "trace.local"
 )
 
 // Server runs a local HTTP server for phone-based inventory intake.
 type Server struct {
-	svc     *service.Service
-	bags    domain.InventoryBagRepository
-	comps   domain.ComponentRepository
-	emitter activity.Emitter
-	token   string
-	port    int
-	mu      sync.Mutex
-	running bool
-	recent  []IntakeEvent
-	pending map[string]*PendingScan
-	httpSrv *http.Server
-	lanIP   string
+	svc       *service.Service
+	bags      domain.InventoryBagRepository
+	comps     domain.ComponentRepository
+	emitter   activity.Emitter
+	token     string
+	port      int
+	pkiDir    string
+	mu        sync.Mutex
+	running   bool
+	recent    []IntakeEvent
+	pending   map[string]*PendingScan
+	httpSrv   *http.Server
+	lanIP     string
+	mdnsStop  func()
+	caCertPEM []byte
 }
 
-// NewServer creates a phone intake server. Port 0 uses the default (8741).
 func NewServer(
 	svc *service.Service,
 	comps domain.ComponentRepository,
 	bags domain.InventoryBagRepository,
 	port int,
 	emitter activity.Emitter,
+	pkiDir string,
 ) *Server {
 	if port == 0 {
 		port = defaultPort
@@ -59,20 +63,19 @@ func NewServer(
 	}
 	token := generateToken()
 	return &Server{
-		svc:     svc,
-		bags:    bags,
-		comps:   comps,
-		emitter: emitter,
-		token:   token,
-		port:    port,
-		lanIP:   detectLANIP(),
-		pending: make(map[string]*PendingScan),
+		svc:      svc,
+		bags:     bags,
+		comps:    comps,
+		emitter:  emitter,
+		token:    token,
+		port:     port,
+		pkiDir:   pkiDir,
+		lanIP:    detectLANIP(),
+		pending:  make(map[string]*PendingScan),
+		mdnsStop: func() {},
 	}
 }
 
-// Start binds the port and begins serving in a background goroutine.
-// Returns an error immediately if the port cannot be bound.
-// Safe to call again after Stop.
 func (s *Server) Start() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -81,12 +84,18 @@ func (s *Server) Start() error {
 		return nil
 	}
 
-	tlsCfg, err := selfSignedTLS(s.lanIP)
+	pki, err := LoadOrCreatePKI(s.pkiDir, s.lanIP)
 	if err != nil {
-		return fmt.Errorf("phone-intake: generate TLS cert: %w", err)
+		return fmt.Errorf("phone-intake: load PKI: %w", err)
 	}
+	s.caCertPEM = pki.CACertPEM
 
-	ln, err := tls.Listen("tcp", fmt.Sprintf(":%d", s.port), tlsCfg)
+	s.mdnsStop = startMDNS(s.lanIP, func(msg string) {
+		log.Printf("[phone-intake] warning: %s", msg)
+		s.emitter.Emit(activity.NewPhoneEvent(activity.SeverityWarning, "mdns-warning", msg, nil))
+	})
+
+	ln, err := tls.Listen("tcp", fmt.Sprintf(":%d", s.port), pki.TLSConfig)
 	if err != nil {
 		return fmt.Errorf("phone-intake: bind port %d: %w", s.port, err)
 	}
@@ -120,17 +129,20 @@ func (s *Server) Start() error {
 	return nil
 }
 
-// Stop gracefully shuts down the server.
 func (s *Server) Stop() {
 	s.mu.Lock()
 	srv := s.httpSrv
+	stopMDNS := s.mdnsStop
 	wasRunning := s.running
 	s.running = false
+	s.mdnsStop = func() {}
 	s.mu.Unlock()
 
 	if wasRunning {
 		s.emitter.Emit(activity.NewPhoneEvent(activity.SeverityInfo, "server-stopped", "Phone intake server stopped", map[string]any{"port": s.port}))
 	}
+
+	stopMDNS()
 
 	if srv != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -146,13 +158,14 @@ func (s *Server) IsRunning() bool {
 	return s.running
 }
 
-// PhoneURL returns the full URL a phone should open.
 func (s *Server) PhoneURL() string {
-	host := s.lanIP
-	if host == "" {
-		host = "localhost"
-	}
-	return fmt.Sprintf("https://%s:%d/phone/%s", host, s.port, s.token)
+	return fmt.Sprintf("https://%s:%d/phone/%s", stableHostname, s.port, s.token)
+}
+
+func (s *Server) CACertPEM() []byte {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.caCertPEM
 }
 
 // Port returns the configured port.

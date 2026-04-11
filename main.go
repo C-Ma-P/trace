@@ -71,7 +71,12 @@ func main() {
 				intakePort = parsed
 			}
 		}
-		intakeServer := phoneintake.NewServer(svc, compRepo, bagRepo, intakePort, activityHub)
+		pkiDir, err := paths.EnsurePhoneIntakePKIDir()
+		if err != nil {
+			log.Printf("[startup] phone-intake PKI dir: %v — phone intake disabled", err)
+			pkiDir = ""
+		}
+		intakeServer := phoneintake.NewServer(svc, compRepo, bagRepo, intakePort, activityHub, pkiDir)
 		backendApp.SetIntakeServer(intakeServer)
 		backendApp.SetBagRepo(bagRepo)
 		defer intakeServer.Stop()
