@@ -227,7 +227,7 @@
     <div class="strip-actions" role="tablist" aria-label="Activity console selectors">
       <button
         type="button"
-        class="action-btn {activeTab === 'activity' ? 'active' : ''}"
+        class="action-btn {(activeTab === 'activity' && expanded) ? 'active' : ''}"
         aria-label="Open activity console"
         on:click={() => toggleConsole('activity')}
       >
@@ -240,7 +240,7 @@
       </button>
       <button
         type="button"
-        class="action-btn {activeTab === 'sourcing' ? 'active' : ''}"
+        class="action-btn {(activeTab === 'sourcing' && expanded) ? 'active' : ''}"
         aria-label="Open sourcing console"
         on:click={() => toggleConsole('sourcing')}
       >
@@ -254,7 +254,7 @@
       </button>
       <button
         type="button"
-        class="action-btn phone-btn {activeTab === 'phone' ? 'active' : ''} {phoneIntakeActive ? 'phone-enabled' : ''}"
+        class="action-btn phone-btn {(activeTab === 'phone' && expanded) ? 'active' : ''} {phoneIntakeActive ? 'phone-enabled' : ''}"
         aria-label="Open phone intake console"
         on:click={() => toggleConsole('phone')}
       >
@@ -335,7 +335,8 @@
   .strip-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 0;
+    border-left: 1px solid var(--color-border);
   }
 
   .action-btn {
@@ -343,9 +344,9 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 38px;
+    min-width: 44px;
     height: 38px;
-    padding: 0;
+    padding: 0 10px;
     border: none;
     border-radius: 0;
     background: transparent;
@@ -354,12 +355,17 @@
     transition: background 0.15s ease, color 0.15s ease;
   }
 
+  .action-btn + .action-btn {
+    border-left: 1px solid var(--color-border);
+  }
+
   .action-btn:hover {
     background: var(--color-bg-surface);
   }
 
   .action-btn.active {
     color: var(--color-text-primary);
+    background: rgba(255, 255, 255, 0.08);
   }
 
   .phone-btn.phone-enabled {
