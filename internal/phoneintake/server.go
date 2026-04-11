@@ -90,10 +90,7 @@ func (s *Server) Start() error {
 	}
 	s.caCertPEM = pki.CACertPEM
 
-	s.mdnsStop = startMDNS(s.lanIP, func(msg string) {
-		log.Printf("[phone-intake] warning: %s", msg)
-		s.emitter.Emit(activity.NewPhoneEvent(activity.SeverityWarning, "mdns-warning", msg, nil))
-	})
+	s.mdnsStop = startMDNS(s.lanIP, s.emitter)
 
 	ln, err := tls.Listen("tcp", fmt.Sprintf(":%d", s.port), pki.TLSConfig)
 	if err != nil {
