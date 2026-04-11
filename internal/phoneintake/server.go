@@ -29,21 +29,21 @@ const (
 
 // Server runs a local HTTP server for phone-based inventory intake.
 type Server struct {
-	svc       *service.Service
-	bags      domain.InventoryBagRepository
-	comps     domain.ComponentRepository
-	emitter   activity.Emitter
-	token     string
-	port      int
-	pkiDir    string
-	mu        sync.Mutex
-	running   bool
-	recent    []IntakeEvent
-	pending   map[string]*PendingScan
+	svc           *service.Service
+	bags          domain.InventoryBagRepository
+	comps         domain.ComponentRepository
+	emitter       activity.Emitter
+	token         string
+	port          int
+	pkiDir        string
+	mu            sync.Mutex
+	running       bool
+	recent        []IntakeEvent
+	pending       map[string]*PendingScan
 	httpSrv       *http.Server
 	hostSelection HostSelection
 	mdnsStop      func()
-	caCertPEM []byte
+	caCertPEM     []byte
 }
 
 func NewServer(
@@ -62,16 +62,16 @@ func NewServer(
 	}
 	token := generateToken()
 	return &Server{
-		svc:      svc,
-		bags:     bags,
-		comps:    comps,
-		emitter:  emitter,
-		token:    token,
-		port:     port,
+		svc:           svc,
+		bags:          bags,
+		comps:         comps,
+		emitter:       emitter,
+		token:         token,
+		port:          port,
 		pkiDir:        pkiDir,
 		hostSelection: selectLANHost(loadHostOverride(pkiDir)),
 		pending:       make(map[string]*PendingScan),
-		mdnsStop: func() {},
+		mdnsStop:      func() {},
 	}
 }
 
@@ -447,5 +447,3 @@ func generateToken() string {
 	_, _ = rand.Read(buf)
 	return hex.EncodeToString(buf)
 }
-
-
