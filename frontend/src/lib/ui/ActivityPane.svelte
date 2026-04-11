@@ -237,74 +237,74 @@
   }
 </script>
 
-<div class="activity-pane" class:expanded={expanded}>
-  <div class="strip">
-    <div class="strip-left" aria-hidden="true"></div>
-    <div class="strip-actions" role="tablist" aria-label="Activity console selectors">
+<div class="activity-dock" class:is-expanded={expanded}>
+  <div class="dock-rail">
+    <div class="dock-tabs" role="tablist" aria-label="Activity dock">
       <button
         type="button"
-        class="action-btn {(activeTab === 'activity' && expanded) ? 'active' : ''}"
-        aria-label="Open activity console"
+        role="tab"
+        class="dock-tab"
+        class:is-active={activeTab === 'activity' && expanded}
+        aria-label="Activity"
+        aria-selected={activeTab === 'activity' && expanded}
         onclick={() => toggleConsole('activity')}
       >
-        <svg viewBox="0 0 20 20" fill="currentColor" class="action-icon">
+        <svg viewBox="0 0 20 20" fill="currentColor" class="tab-icon" aria-hidden="true">
           <path d="M4 14h3V6H4zm5 0h3V9H9zm5 0h3V4h-3z" />
         </svg>
         {#if unreadCounts.activity > 0}
-          <span class="action-count">{unreadCounts.activity}</span>
+          <span class="tab-badge">{unreadCounts.activity}</span>
         {/if}
       </button>
       <button
         type="button"
-        class="action-btn {(activeTab === 'sourcing' && expanded) ? 'active' : ''}"
-        aria-label="Open sourcing console"
+        role="tab"
+        class="dock-tab"
+        class:is-active={activeTab === 'sourcing' && expanded}
+        aria-label="Sourcing"
+        aria-selected={activeTab === 'sourcing' && expanded}
         onclick={() => toggleConsole('sourcing')}
       >
-        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="action-icon">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="tab-icon" aria-hidden="true">
           <circle cx="8" cy="8" r="4" />
           <path d="M12.5 12.5l4 4" />
         </svg>
         {#if unreadCounts.sourcing > 0}
-          <span class="action-count">{unreadCounts.sourcing}</span>
+          <span class="tab-badge">{unreadCounts.sourcing}</span>
         {/if}
       </button>
       <button
         type="button"
-        class="action-btn phone-btn {(activeTab === 'phone' && expanded) ? 'active' : ''} {phoneIntakeActive ? 'phone-enabled' : ''}"
-        aria-label="Open phone intake console"
+        role="tab"
+        class="dock-tab"
+        class:is-active={activeTab === 'phone' && expanded}
+        class:phone-active={phoneIntakeActive}
+        aria-label="Phone intake"
+        aria-selected={activeTab === 'phone' && expanded}
         onclick={() => toggleConsole('phone')}
       >
-        <svg viewBox="0 0 20 20" fill="currentColor" class="action-icon">
+        <svg viewBox="0 0 20 20" fill="currentColor" class="tab-icon" aria-hidden="true">
           <path d="M7 2a2 2 0 00-2 2v12a2 2 0 002 2h6a2 2 0 002-2V4a2 2 0 00-2-2H7zm3 14a1 1 0 100-2 1 1 0 000 2z" />
         </svg>
         {#if unreadCounts.phone > 0}
-          <span class="action-count">{unreadCounts.phone}</span>
+          <span class="tab-badge">{unreadCounts.phone}</span>
         {/if}
       </button>
     </div>
+    <div class="dock-rail-end" aria-hidden="true"></div>
   </div>
 
   {#if expanded}
-    <div class="panel" transition:slide={{ duration: 240, easing: cubicOut }}>
-      <div class="panel-header">
-        <div class="panel-title">
-          {#if activeTab === 'activity'}
-            Activity Console
-          {:else if activeTab === 'sourcing'}
-            Sourcing Console
-          {:else}
-            Phone Intake Console
-          {/if}
-        </div>
-      </div>
-      <div class="panel-content" bind:this={panelContentEl} onscroll={handlePanelScroll}>
+    <div class="dock-body" transition:slide={{ duration: 200, easing: cubicOut }}>
+      <div class="dock-content" bind:this={panelContentEl} onscroll={handlePanelScroll}>
         {#if visibleEventsForTab().length === 0}
           <div class="empty-msg">{emptyMessageForTab(activeTab)}</div>
         {:else}
           <div class="event-list">
             {#each visibleEventsForTab() as event}
               <div
-                class="event-line {badgeClass(event.severity)} {expandedEventId === event.id ? 'selected' : ''}"
+                class="event-row {badgeClass(event.severity)}"
+                class:is-selected={expandedEventId === event.id}
                 role="button"
                 tabindex="0"
                 aria-expanded={expandedEventId === event.id}
@@ -332,9 +332,9 @@
                   }}
                 >
                   {#if copiedEventId === event.id}
-                    Copied
+                    <span class="copy-feedback">copied</span>
                   {:else}
-                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="copy-icon">
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="copy-icon" aria-hidden="true">
                       <rect x="8" y="4" width="8" height="10" rx="1" />
                       <path d="M6 8H5a2 2 0 00-2 2v6a2 2 0 002 2h6a2 2 0 002-2v-1" />
                     </svg>
@@ -342,7 +342,7 @@
                 </span>
               </div>
               {#if expandedEventId === event.id && event.metadata}
-                <div class="event-details">
+                <div class="event-meta">
                   <pre>{formatMetadataJSON(event.metadata)}</pre>
                 </div>
               {/if}
@@ -355,264 +355,236 @@
 </div>
 
 <style>
-  .activity-pane {
+  /* ── Dock shell ──────────────────────────────────────────────── */
+  .activity-dock {
     position: relative;
-    background: var(--color-bg-app);
-    border-top: 1px solid var(--color-border);
-    transition: height 0.24s ease;
+    background: var(--color-bg-surface);
+    border-top: 1px solid var(--color-border-strong);
   }
 
-  .strip {
+  /* ── Dock rail (tab bar) ─────────────────────────────────────── */
+  .dock-rail {
+    position: relative;
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    min-height: 44px;
-    padding: 0 0 0 14px;
-    gap: 12px;
-    color: var(--color-text-secondary);
+    align-items: stretch;
+    height: 34px;
     background: var(--color-bg-surface);
     border-bottom: 1px solid var(--color-border);
   }
 
-  .strip-left {
+  .dock-tabs {
+    display: flex;
+    align-items: stretch;
+  }
+
+  .dock-rail-end {
     flex: 1;
   }
 
-  .strip-actions {
-    display: flex;
-    align-items: center;
-    gap: 0;
-    border-left: 1px solid var(--color-border);
-  }
-
-  .action-btn {
+  /* ── Dock tab buttons ────────────────────────────────────────── */
+  .dock-tab {
     position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 44px;
-    height: 38px;
-    padding: 0 10px;
+    min-width: 40px;
+    padding: 0 13px;
     border: none;
+    border-top: 2px solid transparent;
+    border-right: 1px solid var(--color-border);
     border-radius: 0;
     background: transparent;
-    color: var(--color-text-secondary);
+    color: var(--color-text-muted);
     cursor: pointer;
-    transition: background 0.15s ease, color 0.15s ease;
+    transition: color 0.12s ease, background 0.12s ease;
   }
 
-  .action-btn + .action-btn {
-    border-left: 1px solid var(--color-border);
+  .dock-tab:hover {
+    background: var(--color-bg-hover);
+    color: var(--color-text-secondary);
   }
 
-  .action-btn:hover {
-    background: var(--color-bg-surface);
-  }
-
-  .action-btn.active {
+  .dock-tab.is-active {
+    background: var(--color-bg-muted);
     color: var(--color-text-primary);
-    background: rgba(255, 255, 255, 0.08);
+    border-top-color: var(--color-accent);
+    /* Extend 1px downward to visually cover the rail's bottom border */
+    transform: translateY(1px);
+    z-index: 2;
   }
 
-  .phone-btn.phone-enabled {
+  .dock-tab.is-active:hover {
+    background: var(--color-bg-muted);
+  }
+
+  /* Phone status-aware tab coloring */
+  .dock-tab.phone-active {
     color: var(--color-success);
   }
 
-  .phone-btn.phone-enabled .action-icon {
-    filter: drop-shadow(0 0 6px rgba(52, 211, 153, 0.32));
+  .dock-tab.phone-active.is-active {
+    color: var(--color-success-text);
+    border-top-color: var(--color-success);
   }
 
-  .action-icon {
-    width: 18px;
-    height: 18px;
+  /* ── Tab icon ────────────────────────────────────────────────── */
+  .tab-icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
   }
 
-  .action-count {
+  /* ── Unread badge ────────────────────────────────────────────── */
+  .tab-badge {
     position: absolute;
-    top: 4px;
-    right: 4px;
-    min-width: 16px;
-    padding: 0 4px;
-    border-radius: 999px;
-    font-size: 10px;
-    line-height: 1.4;
-    color: var(--color-text-primary);
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    top: 3px;
+    right: 3px;
+    min-width: 14px;
+    padding: 0 3px;
+    height: 13px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: var(--radius-sm);
+    font-size: 9px;
+    line-height: 13px;
+    color: var(--color-text-secondary);
+    text-align: center;
+    pointer-events: none;
   }
 
-  .panel {
-    border-top: 1px solid var(--color-border);
-    background: var(--color-bg-app);
+  /* ── Dock body ───────────────────────────────────────────────── */
+  .dock-body {
     display: flex;
     flex-direction: column;
-    min-height: 240px;
-    max-height: 280px;
+    min-height: 200px;
+    max-height: 260px;
     overflow: hidden;
   }
 
-  .panel-header {
-    padding: 10px 14px;
-    background: var(--color-bg-surface);
-    border-bottom: 1px solid var(--color-border);
-  }
-
-  .panel-title {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--color-text-primary);
-  }
-
-  .panel-content {
-    padding: 12px 14px 14px;
-    overflow: auto;
+  .dock-content {
     flex: 1;
+    overflow: auto;
+    padding: 4px 0;
     background: var(--color-bg-muted);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-family: var(--font-mono);
+    font-size: 12px;
     color: var(--color-text-primary);
   }
 
+  /* ── Event list ──────────────────────────────────────────────── */
   .event-list {
     display: flex;
     flex-direction: column;
-    gap: 1px;
   }
 
-  .event-line {
+  .event-row {
     position: relative;
-    box-sizing: border-box;
     display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    width: 100%;
-    padding: 5px 44px 5px 10px;
+    align-items: baseline;
+    padding: 3px 38px 3px 10px;
+    border-left: 2px solid transparent;
     cursor: pointer;
-    background: transparent;
-    border: 1px solid transparent;
-    font-size: 12px;
-    line-height: 1.4;
-    color: var(--color-text-primary);
     white-space: pre-wrap;
     word-break: break-word;
-    transition: background 0.15s ease, border-color 0.15s ease;
+    line-height: 1.45;
+    transition: background 0.1s ease;
   }
 
-  .event-line:hover {
+  .event-row:hover {
     background: rgba(255, 255, 255, 0.04);
   }
 
-  .event-line:focus-visible {
-    outline: 2px solid rgba(255, 255, 255, 0.18);
-    outline-offset: 2px;
+  .event-row:focus-visible {
+    outline: 1px solid rgba(255, 255, 255, 0.15);
+    outline-offset: -1px;
   }
+
+  .event-row.is-selected {
+    background: rgba(255, 255, 255, 0.06);
+    border-left-color: var(--color-accent);
+  }
+
+  /* Severity coloring */
+  .event-row.badge-info    { color: var(--color-text-secondary); }
+  .event-row.badge-success { color: var(--color-success-text); }
+  .event-row.badge-warning { color: var(--color-warning-text); }
+  .event-row.badge-error   { color: var(--color-danger-text); }
 
   .event-text {
     flex: 1;
     min-width: 0;
   }
 
+  /* ── Copy affordance ─────────────────────────────────────────── */
   .copy-btn {
     position: absolute;
-    right: 10px;
+    right: 6px;
     top: 50%;
     transform: translateY(-50%);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 28px;
-    height: 20px;
-    padding: 0 6px;
-    border-radius: 5px;
-    background: rgba(255, 255, 255, 0.04);
-    color: var(--color-text-secondary);
-    font-size: 10px;
-    line-height: 1.2;
+    min-width: 24px;
+    height: 18px;
+    padding: 0 4px;
+    background: transparent;
+    color: var(--color-text-muted);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    line-height: 1;
     cursor: pointer;
-    transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
     opacity: 0;
+    border-radius: var(--radius-sm);
+    transition: opacity 0.1s ease, color 0.1s ease, background 0.1s ease;
+  }
+
+  .event-row:hover .copy-btn {
+    opacity: 1;
   }
 
   .copy-btn:hover,
   .copy-btn:focus-visible {
-    background: rgba(255, 255, 255, 0.08);
-    color: var(--color-text-primary);
+    color: var(--color-text-secondary);
+    background: rgba(255, 255, 255, 0.07);
     outline: none;
   }
 
-  .event-line:hover .copy-btn {
-    opacity: 1;
-  }
-
   .copy-icon {
-    width: 14px;
-    height: 14px;
+    width: 12px;
+    height: 12px;
   }
 
-  .event-line.selected {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: var(--color-border);
+  .copy-feedback {
+    font-size: 9px;
+    color: var(--color-text-muted);
+    font-family: var(--font-mono);
   }
 
-  .event-line.badge-info {
-    color: var(--color-text-secondary);
-  }
-
-  .event-line.badge-success {
-    color: var(--color-success);
-  }
-
-  .event-line.badge-warning {
-    color: var(--color-warning);
-  }
-
-  .event-line.badge-error {
-    color: var(--color-danger);
-  }
-
-  .event-text {
-    display: block;
-    min-height: 1.2em;
-  }
-
-  .event-details {
-    padding: 10px 12px;
-    margin: 0 0 0 1px;
-    background: rgba(0, 0, 0, 0.08);
-    border-left: 3px solid rgba(255, 255, 255, 0.08);
-    font-size: 12px;
-    line-height: 1.5;
-    color: var(--color-text-secondary);
+  /* ── Expanded event metadata ─────────────────────────────────── */
+  .event-meta {
+    padding: 5px 10px 5px 24px;
+    background: rgba(0, 0, 0, 0.18);
+    border-left: 2px solid var(--color-accent);
     overflow-x: auto;
-    border-radius: 0 0 6px 6px;
   }
 
-  .event-details pre {
+  .event-meta pre {
     margin: 0;
     padding: 0;
-    font-family: inherit;
-    font-size: 12px;
+    font-family: var(--font-mono);
+    font-size: 11px;
     line-height: 1.5;
     white-space: pre-wrap;
     word-break: break-word;
+    color: var(--color-text-muted);
   }
 
+  /* ── Empty state ─────────────────────────────────────────────── */
   .empty-msg {
-    color: var(--color-text-secondary);
-    font-size: 13px;
-    padding: 22px 0;
+    padding: 24px 0;
     text-align: center;
-  }
-
-  .empty-msg {
-    color: var(--color-text-secondary);
-    font-size: 13px;
-    padding: 28px 0;
-    text-align: center;
-  }
-
-  .panel-loading {
-    color: var(--color-text-secondary);
-    font-size: 13px;
-    padding: 18px 0;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--color-text-muted);
   }
 </style>

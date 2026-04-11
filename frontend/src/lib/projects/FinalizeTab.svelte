@@ -200,9 +200,13 @@
 
   function openComponent(componentId: string | null) {
     if (!componentId) return;
-    window.location.href = `${window.location.pathname}?mode=components&componentId=${encodeURIComponent(
-      componentId,
-    )}`;
+    const params = new URLSearchParams(window.location.search);
+    params.set('mode', 'components');
+    params.set('componentId', componentId);
+    if (project?.id) {
+      params.set('projectId', project.id);
+    }
+    window.location.href = `${window.location.pathname}?${params.toString()}`;
   }
 
   // ---- Helpers ----
