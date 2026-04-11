@@ -20,24 +20,38 @@ func (a *App) SetBagRepo(r domain.InventoryBagRepository) {
 
 // ---------- Phone Intake Status ----------
 
+// PhoneIntakeHostInfo exposes the result of LAN host detection to the frontend.
+type PhoneIntakeHostInfo struct {
+	Host   string `json:"host"`
+	Iface  string `json:"iface"`
+	Source string `json:"source"` // "auto", "override", or "fallback"
+}
+
 type PhoneIntakeInfoResponse struct {
 	Available bool                      `json:"available"`
 	Active    bool                      `json:"active"`
 	URL       string                    `json:"url"`
 	Port      int                       `json:"port"`
 	Recent    []phoneintake.IntakeEvent `json:"recent"`
+	HostInfo  PhoneIntakeHostInfo       `json:"hostInfo"`
 }
 
 func (a *App) GetPhoneIntakeInfo() PhoneIntakeInfoResponse {
 	if a.intake == nil {
 		return PhoneIntakeInfoResponse{}
 	}
+	sel := a.intake.HostInfo()
 	return PhoneIntakeInfoResponse{
 		Available: true,
 		Active:    a.intake.IsRunning(),
 		URL:       a.intake.PhoneURL(),
 		Port:      a.intake.Port(),
 		Recent:    a.intake.RecentEvents(),
+		HostInfo: PhoneIntakeHostInfo{
+			Host:   sel.Host,
+			Iface:  sel.Iface,
+			Source: sel.Source,
+		},
 	}
 }
 
@@ -50,6 +64,25 @@ func (a *App) SetPhoneIntakeEnabled(enabled bool) error {
 	}
 	a.intake.Stop()
 	return nil
+}
+
+// SetPhoneIntakeHostOverride sets a manual display-host override for the phone
+// intake URL. The change is persisted and takes effect immediately in
+// PhoneURL(); restarting the server regenerates the PKI cert with the new SAN.
+func (a *App) SetPhoneIntakeHostOverride(host string) error {
+	if a.intake == nil {
+		return fmt.Errorf("phone intake not available")
+	}
+	return a.intake.SetDisplayHostOverride(host)
+}
+
+// ClearPhoneIntakeHostOverride removes the manual display-host override and
+// reverts to auto-detection.
+func (a *App) ClearPhoneIntakeHostOverride() error {
+	if a.intake == nil {
+		return fmt.Errorf("phone intake not available")
+	}
+	return a.intake.ClearDisplayHostOverride()
 }
 
 // StopIntakeIfRunning stops the phone intake server if it is currently running.

@@ -915,12 +915,19 @@ export interface ActivityEvent {
   metadata?: Record<string, unknown>;
 }
 
+export interface PhoneIntakeHostInfo {
+  host: string;
+  iface: string;
+  source: 'auto' | 'override' | 'fallback';
+}
+
 export interface PhoneIntakeInfo {
   available: boolean;
   active: boolean;
   url: string;
   port: number;
   recent: IntakeEvent[];
+  hostInfo: PhoneIntakeHostInfo;
 }
 
 export interface IntakeEvent {
@@ -953,6 +960,14 @@ export function getPhoneIntakeInfo(): Promise<PhoneIntakeInfo> {
 
 export function setPhoneIntakeEnabled(enabled: boolean): Promise<void> {
   return call('SetPhoneIntakeEnabled', enabled);
+}
+
+export function setPhoneIntakeHostOverride(host: string): Promise<void> {
+  return call('SetPhoneIntakeHostOverride', host);
+}
+
+export function clearPhoneIntakeHostOverride(): Promise<void> {
+  return call('ClearPhoneIntakeHostOverride');
 }
 
 export function createInventoryBag(input: {

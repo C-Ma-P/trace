@@ -3,7 +3,7 @@
   import { slide } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import QRCode from 'qrcode';
-  import { getPhoneIntakeInfo, setPhoneIntakeEnabled, type PhoneIntakeInfo } from '../backend';
+  import { getPhoneIntakeInfo, setPhoneIntakeEnabled, setPhoneIntakeHostOverride, clearPhoneIntakeHostOverride, type PhoneIntakeInfo } from '../backend';
 
   let { collapsed = false }: { collapsed?: boolean } = $props();
 
@@ -12,6 +12,8 @@
   let toggling = $state(false);
   let qrDataURL = $state<string | null>(null);
   let pollTimer: ReturnType<typeof setInterval> | null = null;
+  let showOverrideInput = $state(false);
+  let overrideInputValue = $state('');
 
   async function refresh() {
     try {
@@ -68,6 +70,31 @@
   function copyURL() {
     if (info?.url) navigator.clipboard.writeText(info.url);
   }
+
+  function hostDiagLabel(h: PhoneIntakeInfo['hostInfo'] | undefined): string {
+    if (!h) return '';
+    if (h.source === 'override') return `${h.host} · override`;
+    if (h.source === 'auto') return h.iface ? `${h.host} · ${h.iface}` : h.host;
+    return `${h.host} · no LAN address found`;
+  }
+
+  async function applyHostOverride() {
+    const v = overrideInputValue.trim();
+    if (!v) return;
+    try {
+      await setPhoneIntakeHostOverride(v);
+      showOverrideInput = false;
+      overrideInputValue = '';
+      await refresh();
+    } catch { /* ignore */ }
+  }
+
+  async function resetHostOverride() {
+    try {
+      await clearPhoneIntakeHostOverride();
+      await refresh();
+    } catch { /* ignore */ }
+  }
 </script>
 
 {#if info?.available}
@@ -91,6 +118,31 @@
               {/if}
             </div>
             <div class="intake-hint">Open on your phone (same Wi-Fi)</div>
+            <div class="host-diag">
+              <span
+                class="host-diag-text"
+                class:fallback={info.hostInfo?.source === 'fallback'}
+                class:override={info.hostInfo?.source === 'override'}
+                title="Host used in phone URL"
+              >{hostDiagLabel(info.hostInfo)}</span>
+              {#if info.hostInfo?.source === 'override'}
+                <button class="host-diag-btn" onclick={resetHostOverride}>use auto</button>
+              {:else}
+                <button class="host-diag-btn" onclick={() => { showOverrideInput = !showOverrideInput; overrideInputValue = ''; }}>override</button>
+              {/if}
+            </div>
+            {#if showOverrideInput}
+              <div class="override-row">
+                <input
+                  class="override-input"
+                  bind:value={overrideInputValue}
+                  placeholder="e.g. 192.168.1.50"
+                  onkeydown={(e) => { if (e.key === 'Enter') applyHostOverride(); if (e.key === 'Escape') showOverrideInput = false; }}
+                />
+                <button class="override-set-btn" onclick={applyHostOverride} disabled={!overrideInputValue.trim()}>Set</button>
+                <button class="override-cancel-btn" onclick={() => showOverrideInput = false}>✕</button>
+              </div>
+            {/if}
           </div>
 
           {#if info.recent.length > 0}
@@ -289,6 +341,97 @@
     color: var(--color-text-muted);
     text-align: center;
     margin-bottom: 4px;
+  }
+
+  /* Host diagnostics row */
+  .host-diag {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    margin-bottom: 4px;
+    padding: 3px 4px;
+    background: var(--color-bg-muted);
+    border-radius: var(--radius-sm);
+  }
+  .host-diag-text {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--color-text-muted);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .host-diag-text.fallback {
+    color: var(--color-warning-text, #fbbf24);
+  }
+  .host-diag-text.override {
+    color: var(--color-accent-text);
+  }
+  .host-diag-btn {
+    font-size: 9px;
+    font-weight: 500;
+    color: var(--color-text-muted);
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: rgba(255,255,255,.06);
+    white-space: nowrap;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+  .host-diag-btn:hover {
+    color: var(--color-text-primary);
+    background: rgba(255,255,255,.12);
+  }
+
+  /* Override input row */
+  .override-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 6px;
+  }
+  .override-input {
+    flex: 1;
+    min-width: 0;
+    background: var(--color-bg-input, rgba(255,255,255,.07));
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 4px 6px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--color-text-primary);
+    outline: none;
+  }
+  .override-input:focus {
+    border-color: var(--color-accent, #3b82f6);
+  }
+  .override-set-btn {
+    font-size: 11px;
+    font-weight: 600;
+    color: #fff;
+    background: var(--color-accent, #3b82f6);
+    border-radius: var(--radius-sm);
+    padding: 3px 8px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .override-set-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+  .override-cancel-btn {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    padding: 2px 5px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .override-cancel-btn:hover {
+    color: var(--color-text-primary);
+    background: rgba(255,255,255,.08);
   }
 
   /* Recent events */

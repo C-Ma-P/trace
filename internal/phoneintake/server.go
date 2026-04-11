@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 
 	"sync"
@@ -41,9 +40,9 @@ type Server struct {
 	running   bool
 	recent    []IntakeEvent
 	pending   map[string]*PendingScan
-	httpSrv   *http.Server
-	lanIP     string
-	mdnsStop  func()
+	httpSrv       *http.Server
+	hostSelection HostSelection
+	mdnsStop      func()
 	caCertPEM []byte
 }
 
@@ -69,9 +68,9 @@ func NewServer(
 		emitter:  emitter,
 		token:    token,
 		port:     port,
-		pkiDir:   pkiDir,
-		lanIP:    detectLANIP(),
-		pending:  make(map[string]*PendingScan),
+		pkiDir:        pkiDir,
+		hostSelection: selectLANHost(loadHostOverride(pkiDir)),
+		pending:       make(map[string]*PendingScan),
 		mdnsStop: func() {},
 	}
 }
@@ -84,13 +83,13 @@ func (s *Server) Start() error {
 		return nil
 	}
 
-	pki, err := LoadOrCreatePKI(s.pkiDir, s.lanIP)
+	pki, err := LoadOrCreatePKI(s.pkiDir, s.hostSelection.Host)
 	if err != nil {
 		return fmt.Errorf("phone-intake: load PKI: %w", err)
 	}
 	s.caCertPEM = pki.CACertPEM
 
-	s.mdnsStop = startMDNS(s.lanIP, s.emitter)
+	s.mdnsStop = startMDNS(s.hostSelection.Host, s.emitter)
 
 	ln, err := tls.Listen("tcp", fmt.Sprintf(":%d", s.port), pki.TLSConfig)
 	if err != nil {
@@ -112,10 +111,11 @@ func (s *Server) Start() error {
 		WriteTimeout: 30 * time.Second,
 	}
 	s.running = true
-	s.emitter.Emit(activity.NewPhoneEvent(activity.SeveritySuccess, "server-started", "Phone intake server started", map[string]any{"port": s.port, "url": s.PhoneURL()}))
+	s.emitter.Emit(activity.NewPhoneEvent(activity.SeveritySuccess, "server-started", "Phone intake server started", map[string]any{"port": s.port, "url": s.phoneURLLocked(), "host": s.hostSelection.Host, "hostSource": s.hostSelection.Source}))
 
+	url := s.phoneURLLocked()
 	go func() {
-		log.Printf("[phone-intake] serving on :%d → %s", s.port, s.PhoneURL())
+		log.Printf("[phone-intake] serving on :%d → %s", s.port, url)
 		if err := s.httpSrv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Printf("[phone-intake] server error: %v", err)
 		}
@@ -156,8 +156,52 @@ func (s *Server) IsRunning() bool {
 	return s.running
 }
 
-func (s *Server) PhoneURL() string {
+// phoneURLLocked returns the phone access URL. Caller must hold s.mu.
+func (s *Server) phoneURLLocked() string {
+	if s.hostSelection.Source == "override" {
+		return fmt.Sprintf("https://%s:%d/phone/%s", s.hostSelection.Host, s.port, s.token)
+	}
 	return fmt.Sprintf("https://%s:%d/phone/%s", stableHostname, s.port, s.token)
+}
+
+// PhoneURL returns the phone access URL.
+func (s *Server) PhoneURL() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.phoneURLLocked()
+}
+
+// HostInfo returns a snapshot of the current host selection diagnostics.
+func (s *Server) HostInfo() HostSelection {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.hostSelection
+}
+
+// SetDisplayHostOverride stores host as the manual display-host override,
+// recomputes the host selection, and persists the value to disk.
+// The new URL is returned by PhoneURL immediately after this call.
+// Restarting the server will regenerate PKI certs with the new host as a SAN.
+func (s *Server) SetDisplayHostOverride(host string) error {
+	if err := saveHostOverride(s.pkiDir, host); err != nil {
+		return fmt.Errorf("phone-intake: save host override: %w", err)
+	}
+	s.mu.Lock()
+	s.hostSelection = selectLANHost(host)
+	s.mu.Unlock()
+	return nil
+}
+
+// ClearDisplayHostOverride removes the manual display-host override and
+// reverts to auto-detection.
+func (s *Server) ClearDisplayHostOverride() error {
+	if err := clearHostOverrideFile(s.pkiDir); err != nil {
+		return fmt.Errorf("phone-intake: clear host override: %w", err)
+	}
+	s.mu.Lock()
+	s.hostSelection = selectLANHost("")
+	s.mu.Unlock()
+	return nil
 }
 
 func (s *Server) CACertPEM() []byte {
@@ -404,17 +448,4 @@ func generateToken() string {
 	return hex.EncodeToString(buf)
 }
 
-func detectLANIP() string {
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return "localhost"
-	}
-	for _, addr := range addrs {
-		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-			if ipnet.IP.To4() != nil {
-				return ipnet.IP.String()
-			}
-		}
-	}
-	return "localhost"
-}
+
