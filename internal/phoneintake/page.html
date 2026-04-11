@@ -163,6 +163,41 @@ body{
 #confirm-btn:active{background:#2563eb}
 #confirm-btn:disabled{background:#374151;color:#6b7280;cursor:default}
 .confirm-error{font-size:12px;color:#f87171;text-align:center;display:none}
+
+/* -------- CA setup panel -------- */
+#setup-panel{
+  position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:300;
+  display:flex;align-items:flex-end;
+  opacity:0;pointer-events:none;transition:opacity .2s ease;
+}
+#setup-panel.visible{opacity:1;pointer-events:all}
+#setup-sheet{
+  background:#1a1d27;border-radius:20px 20px 0 0;width:100%;
+  max-height:90%;overflow-y:auto;
+  padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 16px);
+  transform:translateY(100%);transition:transform .25s ease;
+}
+#setup-panel.visible #setup-sheet{transform:translateY(0)}
+.setup-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.setup-title{font-size:15px;font-weight:600;color:#e2e5f0}
+.setup-dismiss{
+  background:rgba(255,255,255,.1);border:none;border-radius:50%;
+  width:30px;height:30px;font-size:18px;color:#e2e5f0;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  padding:0;line-height:1;
+}
+.setup-body p{font-size:13px;color:#8b90a0;line-height:1.6;margin-bottom:12px}
+#setup-steps{font-size:12px;color:#8b90a0;line-height:1.7;margin-bottom:16px;padding:10px 12px;background:rgba(255,255,255,.04);border-radius:8px}
+#setup-steps strong{color:#c0c5d5}
+.setup-btn{
+  display:block;width:100%;text-align:center;
+  background:#3b82f6;color:#fff;border:none;border-radius:8px;
+  padding:12px 16px;font-size:14px;font-weight:600;cursor:pointer;
+  text-decoration:none;margin-bottom:8px;
+}
+.setup-btn:active{background:#2563eb}
+.setup-btn.secondary{background:rgba(255,255,255,.08);color:#c0c5d5}
+.setup-btn.secondary:active{background:rgba(255,255,255,.14)}
 </style>
 </head>
 <body data-api="/phone/{{TOKEN}}/api">
@@ -191,6 +226,23 @@ body{
         <button id="confirm-btn">Add to Library</button>
       </div>
       <div class="confirm-error" id="confirm-error"></div>
+    </div>
+  </div>
+</div>
+
+<div id="setup-panel">
+  <div id="setup-sheet">
+    <div class="setup-head">
+      <span class="setup-title">Certificate Setup</span>
+      <button class="setup-dismiss" id="setup-dismiss">&#x2715;</button>
+    </div>
+    <div class="setup-body">
+      <p>Trace uses its own certificate authority for HTTPS on your local network. Your browser shows a trust warning on the first visit because the Trace CA is not yet installed on this device.</p>
+      <p>Install it once and this address will open cleanly from then on.</p>
+      <div id="setup-steps"></div>
+      <a id="ca-download" class="setup-btn" download="trace-ca.crt">Download Trace CA Certificate</a>
+      <button class="setup-btn secondary" onclick="location.reload()">Installed &mdash; Reload Page</button>
+      <button class="setup-btn secondary" id="setup-continue">Continue to Scanner</button>
     </div>
   </div>
 </div>
@@ -636,6 +688,38 @@ async function init() {
   }
 }
 
+// ---- CA setup panel ----
+var SETUP_SEEN_KEY = 'trace.phone.seen.v1';
+
+function initSetupPanel() {
+  if (localStorage.getItem(SETUP_SEEN_KEY)) return;
+
+  var api = document.body.dataset.api;
+  var caUrl = api.replace(/\/api$/, '/ca.crt');
+  $('ca-download').href = caUrl;
+
+  var ua = navigator.userAgent;
+  var stepsEl = $('setup-steps');
+  if (/iPad|iPhone|iPod/.test(ua) && !window.MSStream) {
+    stepsEl.innerHTML = '<strong>iPhone / iPad:</strong> tap Download &rarr; tap Allow &rarr; open Settings &rarr; General &rarr; VPN &amp; Device Management &rarr; Trace Local CA &rarr; Install. Then go to Settings &rarr; General &rarr; About &rarr; Certificate Trust Settings and enable Trace Local CA.';
+  } else if (/Android/.test(ua)) {
+    stepsEl.innerHTML = '<strong>Android:</strong> tap Download &rarr; open the downloaded file &rarr; follow the system prompt to install as a trusted CA (wording varies by device).';
+  } else {
+    stepsEl.innerHTML = 'Download the certificate and install it as a trusted CA in your device&rsquo;s security settings.';
+  }
+
+  $('setup-panel').classList.add('visible');
+}
+
+function dismissSetupPanel() {
+  localStorage.setItem(SETUP_SEEN_KEY, '1');
+  $('setup-panel').classList.remove('visible');
+}
+
+$('setup-dismiss').addEventListener('click', dismissSetupPanel);
+$('setup-continue').addEventListener('click', dismissSetupPanel);
+
+initSetupPanel();
 init();
 </script>
 </body>

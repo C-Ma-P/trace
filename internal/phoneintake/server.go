@@ -100,6 +100,7 @@ func (s *Server) Start() error {
 	mux := http.NewServeMux()
 	prefix := "/phone/" + s.token
 	mux.HandleFunc(prefix, s.handlePage)
+	mux.HandleFunc(prefix+"/ca.crt", s.handleCACert)
 	mux.HandleFunc(prefix+"/api/recent", s.handleRecent)
 	mux.HandleFunc(prefix+"/api/scan", s.handleScan)
 	mux.HandleFunc(prefix+"/api/detail", s.handleDetail)
@@ -196,6 +197,25 @@ func (s *Server) handlePage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	_, _ = w.Write([]byte(phonePage(s.token)))
+}
+
+func (s *Server) handleCACert(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	s.mu.Lock()
+	cert := s.caCertPEM
+	s.mu.Unlock()
+	if len(cert) == 0 {
+		http.Error(w, "certificate not available", http.StatusServiceUnavailable)
+		return
+	}
+	s.emitter.Emit(activity.NewPhoneEvent(activity.SeverityInfo, "ca-cert-served", "CA certificate downloaded by phone", map[string]any{"remoteAddr": r.RemoteAddr}))
+	w.Header().Set("Content-Type", "application/x-x509-ca-cert")
+	w.Header().Set("Content-Disposition", `attachment; filename="trace-ca.crt"`)
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(cert)
 }
 
 func (s *Server) handleRecent(w http.ResponseWriter, r *http.Request) {

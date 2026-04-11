@@ -7,12 +7,14 @@ require (
 	github.com/PatrickWalther/go-digikey v1.1.0
 	github.com/PatrickWalther/go-lcsc v1.0.0
 	github.com/PatrickWalther/go-mouser v1.1.0
+	github.com/hashicorp/mdns v1.0.6
 	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6
 	github.com/jackc/pgx/v5 v5.9.1
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/pressly/goose/v3 v3.27.0
 	github.com/wailsapp/wails/v3 v3.0.0-alpha.74
 	github.com/zalando/go-keyring v0.2.8
+	golang.org/x/sync v0.19.0
 )
 
 replace github.com/wailsapp/wails/v3 => /home/meet/dev/wails-patch
@@ -51,6 +53,7 @@ require (
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
+	github.com/miekg/dns v1.1.55 // indirect
 	github.com/pjbgf/sha1cd v0.5.0 // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
@@ -62,9 +65,10 @@ require (
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.48.0 // indirect
+	golang.org/x/mod v0.32.0 // indirect
 	golang.org/x/net v0.50.0 // indirect
-	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/text v0.34.0 // indirect
+	golang.org/x/tools v0.41.0 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 )
