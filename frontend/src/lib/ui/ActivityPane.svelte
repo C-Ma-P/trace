@@ -16,12 +16,72 @@
   let expandedEventId = $state<string | null>(null);
   let unreadCounts = $state({ activity: 0, sourcing: 0, phone: 0 });
   let panelContentEl: HTMLDivElement | null = $state(null);
+  let isNearBottom = true;
   let lastViewedAt: Record<ConsoleDomain, string> = {
     activity: '',
     sourcing: '',
     phone: '',
   };
   let refreshTimer: ReturnType<typeof setInterval> | null = null;
+
+  const SCROLL_THRESHOLD = 36;
+
+  function visibleEventsForTab() {
+    return getSortedEvents(events[activeTab]);
+  }
+
+  function handlePanelScroll() {
+    if (!panelContentEl) return;
+    const distanceFromBottom = panelContentEl.scrollHeight - (panelContentEl.scrollTop + panelContentEl.clientHeight);
+    isNearBottom = distanceFromBottom <= SCROLL_THRESHOLD;
+  }
+
+  function getSortedEvents(list: ActivityEvent[]) {
+    return [...list].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  }
+
+  function formatSeverityLabel(event: ActivityEvent) {
+    return event.severity ? event.severity.toUpperCase() : 'INFO';
+  }
+
+  function formatEventDomain(event: ActivityEvent) {
+    if (event.domain === 'sourcing' && event.metadata?.provider) {
+      return `${event.domain}/${event.metadata.provider}`;
+    }
+    if (event.domain === 'phone') {
+      return 'phone';
+    }
+    return event.domain;
+  }
+
+  function formatLogLine(event: ActivityEvent) {
+    const prefix = `[${formatTime(event.timestamp)}] ${formatSeverityLabel(event)} ${formatEventDomain(event)}`;
+    const kind = event.kind ? ` ${event.kind}` : '';
+    return `${prefix}${kind} :: ${event.message}`;
+  }
+
+  function formatMetadataJSON(metadata: unknown) {
+    if (metadata === null || metadata === undefined) {
+      return '';
+    }
+    try {
+      return JSON.stringify(metadata, null, 2);
+    } catch {
+      return String(metadata);
+    }
+  }
+
+  function emptyMessageForTab(domain: ConsoleDomain) {
+    return {
+      activity: 'No structured activity events yet.',
+      sourcing: 'No sourcing events are available.',
+      phone: 'No phone intake events are available.',
+    }[domain];
+  }
+
+  function shouldAutoScrollToBottom() {
+    return expanded && expandedEventId === null && isNearBottom;
+  }
 
   function updateUnreadCounts() {
     unreadCounts = {
@@ -57,21 +117,6 @@
 
   function toggleEventDetails(id: string) {
     expandedEventId = expandedEventId === id ? null : id;
-  }
-
-  function formatMetadataValue(value: unknown): string {
-    if (value === null || value === undefined) {
-      return '';
-    }
-    if (Array.isArray(value)) {
-      return value.map((item) => String(item)).join(', ');
-    }
-    if (typeof value === 'object') {
-      return Object.entries(value)
-        .map(([key, val]) => `${key}: ${String(val)}`)
-        .join(', ');
-    }
-    return String(value);
   }
 
   async function refreshPhoneIntakeInfo() {
@@ -115,7 +160,7 @@
       mapEvents(backendEvents);
       updateUnreadCounts();
 
-      if (expanded && expandedEventId === null) {
+      if (expanded && shouldAutoScrollToBottom()) {
         const previousId = getLastEventId(previousVisibleEvents);
         const currentId = getLastEventId(events[activeTab]);
         if (currentId && currentId !== previousId) {
@@ -184,7 +229,7 @@
         type="button"
         class="action-btn {activeTab === 'activity' ? 'active' : ''}"
         aria-label="Open activity console"
-        onclick={() => toggleConsole('activity')}
+        on:click={() => toggleConsole('activity')}
       >
         <svg viewBox="0 0 20 20" fill="currentColor" class="action-icon">
           <path d="M4 14h3V6H4zm5 0h3V9H9zm5 0h3V4h-3z" />
@@ -197,7 +242,7 @@
         type="button"
         class="action-btn {activeTab === 'sourcing' ? 'active' : ''}"
         aria-label="Open sourcing console"
-        onclick={() => toggleConsole('sourcing')}
+        on:click={() => toggleConsole('sourcing')}
       >
         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="action-icon">
           <circle cx="8" cy="8" r="4" />
@@ -211,7 +256,7 @@
         type="button"
         class="action-btn phone-btn {activeTab === 'phone' ? 'active' : ''} {phoneIntakeActive ? 'phone-enabled' : ''}"
         aria-label="Open phone intake console"
-        onclick={() => toggleConsole('phone')}
+        on:click={() => toggleConsole('phone')}
       >
         <svg viewBox="0 0 20 20" fill="currentColor" class="action-icon">
           <path d="M7 2a2 2 0 00-2 2v12a2 2 0 002 2h6a2 2 0 002-2V4a2 2 0 00-2-2H7zm3 14a1 1 0 100-2 1 1 0 000 2z" />
@@ -236,94 +281,27 @@
           {/if}
         </div>
       </div>
-      <div class="panel-content" bind:this={panelContentEl}>
-        {#if activeTab === 'activity'}
-          <div class="panel-summary">All recent workspace activity and alerts.</div>
-          {#if events.activity.length === 0}
-            <div class="empty-msg">No structured activity events yet.</div>
-          {:else}
-            <div class="event-list">
-              {#each events.activity.slice().reverse() as event}
-                <button type="button" class="event-line {badgeClass(event.severity)} {expandedEventId === event.id ? 'selected' : ''}" onclick={() => toggleEventDetails(event.id)}>
-                  <span class="event-time">{formatTime(event.timestamp)}</span>
-                  <span class="event-severity">{event.severity}</span>
-                  <span class="event-domain">{event.domain}</span>
-                  {#if event.kind}
-                    <span class="event-kind">{event.kind}</span>
-                  {/if}
-                  <span class="event-message">{event.message}</span>
-                </button>
-                {#if expandedEventId === event.id && event.metadata}
-                  <div class="event-details">
-                    {#each Object.entries(event.metadata) as [key, value]}
-                      <div class="metadata-row">
-                        <span class="metadata-key">{key}</span>
-                        <span class="metadata-value">{formatMetadataValue(value)}</span>
-                      </div>
-                    {/each}
-                  </div>
-                {/if}
-              {/each}
-            </div>
-          {/if}
-        {:else if activeTab === 'sourcing'}
-          <div class="panel-summary">Supplier and sourcing-related history, problems, and state changes.</div>
-          {#if events.sourcing.length === 0}
-            <div class="empty-msg">No sourcing events are available.</div>
-          {:else}
-            <div class="event-list">
-              {#each events.sourcing.slice().reverse() as event}
-                <button type="button" class="event-line {badgeClass(event.severity)} {expandedEventId === event.id ? 'selected' : ''}" onclick={() => toggleEventDetails(event.id)}>
-                  <span class="event-time">{formatTime(event.timestamp)}</span>
-                  <span class="event-severity">{event.severity}</span>
-                  <span class="event-domain">{event.metadata?.provider ?? 'sourcing'}</span>
-                  {#if event.kind}
-                    <span class="event-kind">{event.kind}</span>
-                  {/if}
-                  <span class="event-message">{event.message}</span>
-                </button>
-                {#if expandedEventId === event.id && event.metadata}
-                  <div class="event-details">
-                    {#each Object.entries(event.metadata) as [key, value]}
-                      <div class="metadata-row">
-                        <span class="metadata-key">{key}</span>
-                        <span class="metadata-value">{formatMetadataValue(value)}</span>
-                      </div>
-                    {/each}
-                  </div>
-                {/if}
-              {/each}
-            </div>
-          {/if}
+      <div class="panel-content" bind:this={panelContentEl} on:scroll={handlePanelScroll}>
+        {#if visibleEventsForTab().length === 0}
+          <div class="empty-msg">{emptyMessageForTab(activeTab)}</div>
         {:else}
-          <div class="panel-summary">Phone intake event history and recent mobile scan activity.</div>
-          {#if events.phone.length === 0}
-            <div class="empty-msg">No phone intake events are available.</div>
-          {:else}
-            <div class="event-list">
-              {#each events.phone.slice().reverse() as event}
-                <button type="button" class="event-line {badgeClass(event.severity)} {expandedEventId === event.id ? 'selected' : ''}" onclick={() => toggleEventDetails(event.id)}>
-                  <span class="event-time">{formatTime(event.timestamp)}</span>
-                  <span class="event-severity">{event.severity}</span>
-                  <span class="event-domain">Phone</span>
-                  {#if event.kind}
-                    <span class="event-kind">{event.kind}</span>
-                  {/if}
-                  <span class="event-message">{event.message}</span>
-                </button>
-                {#if expandedEventId === event.id && event.metadata}
-                  <div class="event-details">
-                    {#each Object.entries(event.metadata) as [key, value]}
-                      <div class="metadata-row">
-                        <span class="metadata-key">{key}</span>
-                        <span class="metadata-value">{formatMetadataValue(value)}</span>
-                      </div>
-                    {/each}
-                  </div>
-                {/if}
-              {/each}
-            </div>
-          {/if}
+          <div class="event-list">
+            {#each visibleEventsForTab() as event}
+              <button
+                type="button"
+                class="event-line {badgeClass(event.severity)} {expandedEventId === event.id ? 'selected' : ''}"
+                aria-expanded={expandedEventId === event.id}
+                on:click={() => toggleEventDetails(event.id)}
+              >
+                <span class="event-text">{formatLogLine(event)}</span>
+              </button>
+              {#if expandedEventId === event.id && event.metadata}
+                <div class="event-details">
+                  <pre>{formatMetadataJSON(event.metadata)}</pre>
+                </div>
+              {/if}
+            {/each}
+          </div>
         {/if}
       </div>
     </div>
@@ -413,7 +391,7 @@
 
   .panel {
     border-top: 1px solid var(--color-border);
-    background: var(--color-bg-surface);
+    background: var(--color-bg-app);
     display: flex;
     flex-direction: column;
     min-height: 240px;
@@ -422,8 +400,8 @@
   }
 
   .panel-header {
-    padding: 12px 16px;
-    background: var(--color-bg-app);
+    padding: 10px 14px;
+    background: var(--color-bg-surface);
     border-bottom: 1px solid var(--color-border);
   }
 
@@ -434,109 +412,94 @@
   }
 
   .panel-content {
-    padding: 14px 16px 18px;
+    padding: 12px 14px 14px;
     overflow: auto;
     flex: 1;
-  }
-
-  .panel-summary {
-    margin-bottom: 12px;
-    font-size: 12px;
-    color: var(--color-text-secondary);
+    background: var(--color-bg-muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    color: var(--color-text-primary);
   }
 
   .event-list {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 1px;
   }
 
   .event-line {
     all: unset;
     box-sizing: border-box;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
+    display: block;
+    width: 100%;
+    padding: 5px 10px;
     cursor: pointer;
-    border-radius: 6px;
-    background: var(--color-bg-muted);
-    transition: background 0.15s ease, transform 0.15s ease;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    background: transparent;
+    border: 1px solid transparent;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--color-text-primary);
+    white-space: pre-wrap;
+    word-break: break-word;
+    transition: background 0.15s ease, border-color 0.15s ease;
   }
 
   .event-line:hover {
-    background: var(--color-bg-hover);
+    background: rgba(255, 255, 255, 0.04);
   }
 
   .event-line.selected {
-    background: var(--color-bg-surface);
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--color-border);
   }
 
-  .event-line.badge-info .event-severity {
+  .event-line.badge-info {
     color: var(--color-text-secondary);
   }
-  .event-line.badge-success .event-severity {
+
+  .event-line.badge-success {
     color: var(--color-success);
   }
-  .event-line.badge-warning .event-severity {
+
+  .event-line.badge-warning {
     color: var(--color-warning);
   }
-  .event-line.badge-error .event-severity {
+
+  .event-line.badge-error {
     color: var(--color-danger);
   }
 
-  .event-time,
-  .event-domain,
-  .event-kind,
-  .event-severity {
-    font-size: 11px;
-    color: var(--color-text-tertiary);
-    white-space: nowrap;
-  }
-
-  .event-message {
-    flex: 1 1 100%;
-    font-size: 13px;
-    line-height: 1.3;
-    color: var(--color-text-primary);
-    overflow-wrap: anywhere;
-  }
-
-  .event-kind {
-    padding: 2px 8px;
-    border-radius: 999px;
-    border: 1px solid var(--color-border);
-    color: var(--color-text-secondary);
-    background: var(--color-bg-muted);
+  .event-text {
+    display: block;
+    min-height: 1.2em;
   }
 
   .event-details {
-    padding: 10px 14px 14px 14px;
-    background: var(--color-bg-app);
-    border-bottom: 1px solid var(--color-border);
-    border-left: 3px solid var(--color-border);
-  }
-
-  .metadata-row {
-    display: flex;
-    justify-content: space-between;
-    gap: 20px;
-    padding: 4px 0;
+    padding: 10px 12px;
+    margin: 0 0 0 1px;
+    background: rgba(0, 0, 0, 0.08);
+    border-left: 3px solid rgba(255, 255, 255, 0.08);
     font-size: 12px;
+    line-height: 1.5;
     color: var(--color-text-secondary);
+    overflow-x: auto;
+    border-radius: 0 0 6px 6px;
   }
 
-  .metadata-key {
-    color: var(--color-text-primary);
-    font-weight: 600;
+  .event-details pre {
+    margin: 0;
+    padding: 0;
+    font-family: inherit;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 
-  .metadata-value {
-    text-align: right;
-    flex: 1;
-    min-width: 80px;
+  .empty-msg {
+    color: var(--color-text-secondary);
+    font-size: 13px;
+    padding: 22px 0;
+    text-align: center;
   }
 
   .empty-msg {
