@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"trace/internal/domain"
+	"github.com/C-Ma-P/trace/internal/domain"
 )
 
 type ComponentAssetRepository struct {

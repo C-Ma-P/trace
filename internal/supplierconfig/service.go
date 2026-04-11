@@ -9,10 +9,10 @@ import (
 	"strings"
 	"sync"
 
-	"trace/internal/activity"
-	"trace/internal/domain"
-	"trace/internal/secretstore"
-	"trace/internal/sourcing"
+	"github.com/C-Ma-P/trace/internal/activity"
+	"github.com/C-Ma-P/trace/internal/domain"
+	"github.com/C-Ma-P/trace/internal/secretstore"
+	"github.com/C-Ma-P/trace/internal/sourcing"
 )
 
 const (

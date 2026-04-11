@@ -3,7 +3,7 @@ package postgres
 import (
 	"context"
 
-	"trace/internal/domain"
+	"github.com/C-Ma-P/trace/internal/domain"
 )
 
 type PreferenceRepository struct {

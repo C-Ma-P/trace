@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"trace/internal/paths"
+	"github.com/C-Ma-P/trace/internal/paths"
 )
 
 const maxRecentProjects = 10

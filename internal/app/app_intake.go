@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"trace/internal/domain"
-	"trace/internal/phoneintake"
+	"github.com/C-Ma-P/trace/internal/domain"
+	"github.com/C-Ma-P/trace/internal/phoneintake"
 )
 
 // SetIntakeServer sets the phone intake server reference for status queries.

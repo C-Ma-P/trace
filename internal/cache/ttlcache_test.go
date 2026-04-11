@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"trace/internal/cache"
+	"github.com/C-Ma-P/trace/internal/cache"
 )
 
 func TestTTLCache_SetGetExpires(t *testing.T) {

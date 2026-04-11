@@ -14,10 +14,10 @@ import (
 	"strings"
 	"time"
 
-	"trace/internal/domain"
-	"trace/internal/ingest"
-	"trace/internal/paths"
-	"trace/internal/sourcing"
+	"github.com/C-Ma-P/trace/internal/domain"
+	"github.com/C-Ma-P/trace/internal/ingest"
+	"github.com/C-Ma-P/trace/internal/paths"
+	"github.com/C-Ma-P/trace/internal/sourcing"
 )
 
 func (a *App) ListProjects() ([]ProjectResponse, error) {

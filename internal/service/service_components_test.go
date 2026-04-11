@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	"trace/internal/domain"
-	"trace/internal/domain/registry"
-	"trace/internal/service"
+	"github.com/C-Ma-P/trace/internal/domain"
+	"github.com/C-Ma-P/trace/internal/domain/registry"
+	"github.com/C-Ma-P/trace/internal/service"
 )
 
 func TestSyncCanonicalAttributeDefinitions_AllCategoriesUpserted(t *testing.T) {

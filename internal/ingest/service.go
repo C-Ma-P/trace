@@ -14,7 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"trace/internal/domain"
+	"github.com/C-Ma-P/trace/internal/domain"
 )
 
 // maxExtractedFileSize is the maximum allowed size for a single file extracted

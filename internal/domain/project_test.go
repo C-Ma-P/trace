@@ -3,7 +3,7 @@ package domain_test
 import (
 	"testing"
 
-	"trace/internal/domain"
+	"github.com/C-Ma-P/trace/internal/domain"
 )
 
 func strPtr(s string) *string { return &s }

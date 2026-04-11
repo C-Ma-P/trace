@@ -1,6 +1,6 @@
 package kicad
 
-import "trace/internal/domain"
+import "github.com/C-Ma-P/trace/internal/domain"
 
 type ProjectCandidate struct {
 	Name        string

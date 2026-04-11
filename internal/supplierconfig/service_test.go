@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"trace/internal/activity"
-	"trace/internal/secretstore"
+	"github.com/C-Ma-P/trace/internal/activity"
+	"github.com/C-Ma-P/trace/internal/secretstore"
 )
 
 type fakePreferenceRepo struct {

@@ -1,4 +1,4 @@
-module github.com/C-Ma-P/trace
+module trace
 
 go 1.26.1
 

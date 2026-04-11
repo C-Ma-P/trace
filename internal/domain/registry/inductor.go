@@ -1,6 +1,6 @@
 package registry
 
-import "trace/internal/domain"
+import "github.com/C-Ma-P/trace/internal/domain"
 
 const (
 	AttrInductanceH  = "inductance_h"

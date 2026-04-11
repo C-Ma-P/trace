@@ -20,12 +20,12 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 
-	"trace/internal/domain"
-	"trace/internal/domain/registry"
-	"trace/internal/launcher"
-	"trace/internal/paths"
-	"trace/internal/service"
-	"trace/internal/store/postgres"
+	"github.com/C-Ma-P/trace/internal/domain"
+	"github.com/C-Ma-P/trace/internal/domain/registry"
+	"github.com/C-Ma-P/trace/internal/launcher"
+	"github.com/C-Ma-P/trace/internal/paths"
+	"github.com/C-Ma-P/trace/internal/service"
+	"github.com/C-Ma-P/trace/internal/store/postgres"
 )
 
 func main() {

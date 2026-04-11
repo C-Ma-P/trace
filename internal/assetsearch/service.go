@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log"
 
-	"trace/internal/domain"
-	"trace/internal/ingest"
+	"github.com/C-Ma-P/trace/internal/domain"
+	"github.com/C-Ma-P/trace/internal/ingest"
 )
 
 // Service orchestrates asset search and import across providers.

@@ -3,7 +3,7 @@ package phoneintake
 import (
 	"time"
 
-	"trace/internal/sourcing"
+	"github.com/C-Ma-P/trace/internal/sourcing"
 )
 
 // IntakeEvent records a recent phone intake action for desktop visibility.

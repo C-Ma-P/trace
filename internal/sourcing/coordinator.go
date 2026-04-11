@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"trace/internal/activity"
-	"trace/internal/cache"
+	"github.com/C-Ma-P/trace/internal/activity"
+	"github.com/C-Ma-P/trace/internal/cache"
 
 	"golang.org/x/sync/singleflight"
 )

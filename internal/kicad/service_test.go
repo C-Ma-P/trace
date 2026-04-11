@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"trace/internal/domain"
-	"trace/internal/domain/registry"
+	"github.com/C-Ma-P/trace/internal/domain"
+	"github.com/C-Ma-P/trace/internal/domain/registry"
 )
 
 type stubExporter struct {

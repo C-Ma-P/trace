@@ -8,12 +8,12 @@ import (
 
 	"fmt"
 
-	"trace/internal/domain"
-	"trace/internal/domain/registry"
-	"trace/internal/kicad"
-	"trace/internal/kicadconfig"
-	"trace/internal/sourcing"
-	"trace/internal/supplierconfig"
+	"github.com/C-Ma-P/trace/internal/domain"
+	"github.com/C-Ma-P/trace/internal/domain/registry"
+	"github.com/C-Ma-P/trace/internal/kicad"
+	"github.com/C-Ma-P/trace/internal/kicadconfig"
+	"github.com/C-Ma-P/trace/internal/sourcing"
+	"github.com/C-Ma-P/trace/internal/supplierconfig"
 )
 
 type Service struct {

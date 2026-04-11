@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"trace/internal/activity"
+	"github.com/C-Ma-P/trace/internal/activity"
 )
 
 func TestHubMaintainsBoundedRecentEvents(t *testing.T) {

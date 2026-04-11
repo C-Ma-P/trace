@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"trace/internal/domain"
-	"trace/internal/service"
-	"trace/internal/sourcing"
+	"github.com/C-Ma-P/trace/internal/domain"
+	"github.com/C-Ma-P/trace/internal/service"
+	"github.com/C-Ma-P/trace/internal/sourcing"
 )
 
 type capturingProvider struct {

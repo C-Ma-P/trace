@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"trace/internal/domain"
+	"github.com/C-Ma-P/trace/internal/domain"
 )
 
 type BagRepository struct {

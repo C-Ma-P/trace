@@ -10,7 +10,7 @@ import (
 
 	easyeda "github.com/C-Ma-P/go-easyeda"
 
-	"trace/internal/ingest"
+	"github.com/C-Ma-P/trace/internal/ingest"
 )
 
 // Service orchestrates EasyEDA/LCSC component asset import.

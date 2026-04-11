@@ -3,8 +3,8 @@ package app
 import (
 	"context"
 
-	"trace/internal/kicadconfig"
-	"trace/internal/supplierconfig"
+	"github.com/C-Ma-P/trace/internal/kicadconfig"
+	"github.com/C-Ma-P/trace/internal/supplierconfig"
 )
 
 func (a *App) GetKiCadPreferences() (KiCadPreferencesResponse, error) {

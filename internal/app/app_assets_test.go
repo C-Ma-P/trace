@@ -3,7 +3,7 @@ package app
 import (
 	"testing"
 
-	"trace/internal/domain"
+	"github.com/C-Ma-P/trace/internal/domain"
 )
 
 func TestShouldSkipEasyEDAImport(t *testing.T) {

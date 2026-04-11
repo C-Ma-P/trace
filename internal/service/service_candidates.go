@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"trace/internal/domain"
-	"trace/internal/sourcing"
+	"github.com/C-Ma-P/trace/internal/domain"
+	"github.com/C-Ma-P/trace/internal/sourcing"
 )
 
 // --- Part Candidates ---

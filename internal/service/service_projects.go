@@ -5,9 +5,9 @@ import (
 	"sort"
 	"time"
 
-	"trace/internal/domain"
-	"trace/internal/domain/registry"
-	"trace/internal/sourcing"
+	"github.com/C-Ma-P/trace/internal/domain"
+	"github.com/C-Ma-P/trace/internal/domain/registry"
+	"github.com/C-Ma-P/trace/internal/sourcing"
 )
 
 func (s *Service) CreateProject(ctx context.Context, project domain.Project) (domain.Project, error) {

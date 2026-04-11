@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"trace/internal/activity"
+	"github.com/C-Ma-P/trace/internal/activity"
 )
 
 // captureEmitter records every emitted event.

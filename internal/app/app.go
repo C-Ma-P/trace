@@ -3,15 +3,15 @@ package app
 import (
 	"fmt"
 
-	"trace/internal/activity"
-	"trace/internal/assetsearch"
-	"trace/internal/domain"
-	"trace/internal/domain/registry"
-	"trace/internal/ingest"
-	"trace/internal/launcher"
-	"trace/internal/phoneintake"
-	easyedaprovider "trace/internal/providers/easyeda"
-	"trace/internal/service"
+	"github.com/C-Ma-P/trace/internal/activity"
+	"github.com/C-Ma-P/trace/internal/assetsearch"
+	"github.com/C-Ma-P/trace/internal/domain"
+	"github.com/C-Ma-P/trace/internal/domain/registry"
+	"github.com/C-Ma-P/trace/internal/ingest"
+	"github.com/C-Ma-P/trace/internal/launcher"
+	"github.com/C-Ma-P/trace/internal/phoneintake"
+	easyedaprovider "github.com/C-Ma-P/trace/internal/providers/easyeda"
+	"github.com/C-Ma-P/trace/internal/service"
 )
 
 type App struct {

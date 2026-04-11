@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"trace/internal/domain"
-	"trace/internal/domain/registry"
+	"github.com/C-Ma-P/trace/internal/domain"
+	"github.com/C-Ma-P/trace/internal/domain/registry"
 )
 
 func (s *Service) CreateComponent(ctx context.Context, component domain.Component) (domain.Component, error) {

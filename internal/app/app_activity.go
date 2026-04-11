@@ -1,6 +1,6 @@
 package app
 
-import "trace/internal/activity"
+import "github.com/C-Ma-P/trace/internal/activity"
 
 func (a *App) SetActivityHub(hub *activity.Hub) {
 	a.activityHub = hub

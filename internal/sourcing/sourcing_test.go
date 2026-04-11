@@ -12,8 +12,8 @@ import (
 	lcsc "github.com/PatrickWalther/go-lcsc"
 	mouser "github.com/PatrickWalther/go-mouser"
 
-	"trace/internal/domain"
-	"trace/internal/domain/registry"
+	"github.com/C-Ma-P/trace/internal/domain"
+	"github.com/C-Ma-P/trace/internal/domain/registry"
 )
 
 type stubProvider struct {

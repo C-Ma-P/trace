@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"trace/internal/domain"
-	"trace/internal/sourcing"
+	"github.com/C-Ma-P/trace/internal/domain"
+	"github.com/C-Ma-P/trace/internal/sourcing"
 )
 
 func (s *Service) LookupVendorPartID(ctx context.Context, vendor, partID string) (sourcing.SupplierOffer, error) {

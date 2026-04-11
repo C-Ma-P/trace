@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"trace/internal/domain"
+	"github.com/C-Ma-P/trace/internal/domain"
 )
 
 // classifyFile determines the asset type for a file based on its extension.

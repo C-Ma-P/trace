@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"trace/internal/domain"
+	"github.com/C-Ma-P/trace/internal/domain"
 )
 
 const (

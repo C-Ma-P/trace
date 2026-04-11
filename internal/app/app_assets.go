@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"trace/internal/assetsearch"
-	"trace/internal/domain"
-	"trace/internal/domain/registry"
-	"trace/internal/ingest"
-	easyedaprovider "trace/internal/providers/easyeda"
+	"github.com/C-Ma-P/trace/internal/assetsearch"
+	"github.com/C-Ma-P/trace/internal/domain"
+	"github.com/C-Ma-P/trace/internal/domain/registry"
+	"github.com/C-Ma-P/trace/internal/ingest"
+	easyedaprovider "github.com/C-Ma-P/trace/internal/providers/easyeda"
 )
 
 func (a *App) CreateComponentAsset(req CreateComponentAssetInput) (ComponentAssetResponse, error) {

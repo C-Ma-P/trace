@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"trace/internal/sourcing"
+	"github.com/C-Ma-P/trace/internal/sourcing"
 )
 
 type countingProvider struct {

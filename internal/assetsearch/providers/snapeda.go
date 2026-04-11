@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"trace/internal/assetsearch"
+	"github.com/C-Ma-P/trace/internal/assetsearch"
 )
 
 // SnapEDA is a stub provider for snapeda.com.
