@@ -117,7 +117,10 @@ func (s *Server) Start() error {
 	go func() {
 		log.Printf("[phone-intake] serving on :%d → %s", s.port, url)
 		if err := s.httpSrv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			msg := fmt.Sprintf("Phone intake server error: %v", err)
 			log.Printf("[phone-intake] server error: %v", err)
+			s.emitter.Emit(activity.NewPhoneEvent(activity.SeverityError, "server-error", msg,
+				map[string]any{"error": err.Error()}))
 		}
 		s.mu.Lock()
 		s.running = false
@@ -419,12 +422,18 @@ func (s *Server) handleConfirm(w http.ResponseWriter, r *http.Request) {
 	component, err := s.svc.ResolveComponentFromOffer(r.Context(), *scan.Offer)
 	if err != nil {
 		log.Printf("[phone-intake] resolve failed on confirm scan=%s: %v", req.ID, err)
+		s.emitter.Emit(activity.NewPhoneEvent(activity.SeverityError, "confirm-resolve-failed",
+			fmt.Sprintf("Phone scan confirm failed: %v", err),
+			map[string]any{"scanId": req.ID, "error": err.Error()}))
 		writeJSON(w, http.StatusInternalServerError, ConfirmResponse{Error: err.Error()})
 		return
 	}
 	if req.Quantity > 0 {
 		if _, err := s.svc.StampInventory(r.Context(), component.ID, req.Quantity); err != nil {
 			log.Printf("[phone-intake] inventory stamp failed componentID=%s qty=%d: %v", component.ID, req.Quantity, err)
+			s.emitter.Emit(activity.NewPhoneEvent(activity.SeverityError, "inventory-stamp-failed",
+				fmt.Sprintf("Inventory stamp failed: %v", err),
+				map[string]any{"componentId": component.ID, "quantity": req.Quantity, "error": err.Error()}))
 			writeJSON(w, http.StatusInternalServerError, ConfirmResponse{Error: err.Error()})
 			return
 		}

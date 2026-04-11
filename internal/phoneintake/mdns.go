@@ -107,13 +107,22 @@ func startMDNS(lanIP string, emit activity.Emitter) func() {
 		// receives our own announcements on the same host.
 		pc := ipv4.NewPacketConn(conn)
 		if err := pc.SetMulticastInterface(&iface); err != nil {
-			log.Printf("[phone-intake] mDNS: SetMulticastInterface on %s failed (non-fatal): %v", iface.Name, err)
+			msg := fmt.Sprintf("mDNS: SetMulticastInterface on %s failed (non-fatal): %v", iface.Name, err)
+			log.Printf("[phone-intake] %s", msg)
+			emit.Emit(activity.NewPhoneEvent(activity.SeverityWarning, "mdns-socket-setup-failed", msg,
+				map[string]any{"iface": iface.Name, "error": err.Error()}))
 		}
 		if err := pc.SetMulticastTTL(255); err != nil {
-			log.Printf("[phone-intake] mDNS: SetMulticastTTL on %s failed (non-fatal): %v", iface.Name, err)
+			msg := fmt.Sprintf("mDNS: SetMulticastTTL on %s failed (non-fatal): %v", iface.Name, err)
+			log.Printf("[phone-intake] %s", msg)
+			emit.Emit(activity.NewPhoneEvent(activity.SeverityWarning, "mdns-socket-setup-failed", msg,
+				map[string]any{"iface": iface.Name, "error": err.Error()}))
 		}
 		if err := pc.SetMulticastLoopback(true); err != nil {
-			log.Printf("[phone-intake] mDNS: SetMulticastLoopback on %s failed (non-fatal): %v", iface.Name, err)
+			msg := fmt.Sprintf("mDNS: SetMulticastLoopback on %s failed (non-fatal): %v", iface.Name, err)
+			log.Printf("[phone-intake] %s", msg)
+			emit.Emit(activity.NewPhoneEvent(activity.SeverityWarning, "mdns-socket-setup-failed", msg,
+				map[string]any{"iface": iface.Name, "error": err.Error()}))
 		}
 		active = append(active, bound{iface, conn})
 	}
@@ -143,7 +152,10 @@ func startMDNS(lanIP string, emit activity.Emitter) func() {
 	// Gratuitous announcement on startup so listeners see us immediately.
 	for _, b := range active {
 		if err := sendMDNSAnnounce(b.conn, aRec); err != nil {
-			log.Printf("[phone-intake] mDNS: initial announce on %s failed: %v", b.iface.Name, err)
+			msg := fmt.Sprintf("mDNS: initial announce on %s failed: %v", b.iface.Name, err)
+			log.Printf("[phone-intake] %s", msg)
+			emit.Emit(activity.NewPhoneEvent(activity.SeverityWarning, "mdns-announce-failed", msg,
+				map[string]any{"iface": b.iface.Name, "error": err.Error()}))
 		}
 	}
 
@@ -151,7 +163,7 @@ func startMDNS(lanIP string, emit activity.Emitter) func() {
 	for _, b := range active {
 		b := b
 		ip6 := interfaceRoutableIPv6Addrs(b.iface)
-		go mdnsRespond(ctx, b.conn, ip4, ip6)
+		go mdnsRespond(ctx, b.conn, ip4, ip6, emit)
 	}
 
 	// Periodic re-announcement (keeps caches warm; RFC 6762 recommends ≤ TTL/2).
@@ -202,7 +214,7 @@ func startMDNS(lanIP string, emit activity.Emitter) func() {
 // It handles A, ANY, and AAAA queries for stableHostname.  For AAAA queries on
 // a host with no routable IPv6 address, it returns an NSEC negative response
 // per RFC 6762 §6.1 so Android resolvers can promptly fall back to A.
-func mdnsRespond(ctx context.Context, conn *net.UDPConn, ip4 net.IP, ip6Addrs []net.IP) {
+func mdnsRespond(ctx context.Context, conn *net.UDPConn, ip4 net.IP, ip6Addrs []net.IP, emit activity.Emitter) {
 	buf := make([]byte, 65535)
 	aRec := buildARecord(ip4)
 
@@ -246,28 +258,43 @@ func mdnsRespond(ctx context.Context, conn *net.UDPConn, ip4 net.IP, ip6Addrs []
 			}
 			switch q.Qtype {
 			case dns.TypeA:
-				log.Printf("[phone-intake] mDNS: A query from %s:%d", src.IP, src.Port)
+				msg := fmt.Sprintf("mDNS: A query from %s:%d", src.IP, src.Port)
+				log.Printf("[phone-intake] %s", msg)
+				emit.Emit(activity.NewPhoneEvent(activity.SeverityInfo, "mdns-query", msg,
+					map[string]any{"qtype": "A", "from": fmt.Sprintf("%s:%d", src.IP, src.Port)}))
 				answers = append(answers, aRec)
 			case dns.TypeANY:
-				log.Printf("[phone-intake] mDNS: ANY query from %s:%d", src.IP, src.Port)
+				msg := fmt.Sprintf("mDNS: ANY query from %s:%d", src.IP, src.Port)
+				log.Printf("[phone-intake] %s", msg)
+				emit.Emit(activity.NewPhoneEvent(activity.SeverityInfo, "mdns-query", msg,
+					map[string]any{"qtype": "ANY", "from": fmt.Sprintf("%s:%d", src.IP, src.Port)}))
 				answers = append(answers, aRec)
 				for _, ip6 := range ip6Addrs {
 					answers = append(answers, buildAAAARecord(ip6))
 				}
 			case dns.TypeAAAA:
 				if len(ip6Addrs) > 0 {
-					log.Printf("[phone-intake] mDNS: AAAA query from %s:%d → positive (%d addr)", src.IP, src.Port, len(ip6Addrs))
+					msg := fmt.Sprintf("mDNS: AAAA query from %s:%d → positive (%d addr)", src.IP, src.Port, len(ip6Addrs))
+					log.Printf("[phone-intake] %s", msg)
+					emit.Emit(activity.NewPhoneEvent(activity.SeverityInfo, "mdns-query", msg,
+						map[string]any{"qtype": "AAAA", "from": fmt.Sprintf("%s:%d", src.IP, src.Port)}))
 					for _, ip6 := range ip6Addrs {
 						answers = append(answers, buildAAAARecord(ip6))
 					}
 				} else {
 					// RFC 6762 §6.1: send NSEC to signal authoritative "no AAAA" so
 					// the resolver does not have to wait for the full negative TTL.
-					log.Printf("[phone-intake] mDNS: AAAA query from %s:%d → NSEC negative (no IPv6)", src.IP, src.Port)
+					msg := fmt.Sprintf("mDNS: AAAA query from %s:%d → NSEC negative (no IPv6)", src.IP, src.Port)
+					log.Printf("[phone-intake] %s", msg)
+					emit.Emit(activity.NewPhoneEvent(activity.SeverityInfo, "mdns-query", msg,
+						map[string]any{"qtype": "AAAA", "from": fmt.Sprintf("%s:%d", src.IP, src.Port), "nsec": true}))
 					answers = append(answers, buildNSECRecord())
 				}
 			default:
-				log.Printf("[phone-intake] mDNS: qtype %s from %s:%d — ignored", dns.TypeToString[q.Qtype], src.IP, src.Port)
+				msg := fmt.Sprintf("mDNS: qtype %s from %s:%d — ignored", dns.TypeToString[q.Qtype], src.IP, src.Port)
+				log.Printf("[phone-intake] %s", msg)
+				emit.Emit(activity.NewPhoneEvent(activity.SeverityInfo, "mdns-query", msg,
+					map[string]any{"qtype": dns.TypeToString[q.Qtype], "from": fmt.Sprintf("%s:%d", src.IP, src.Port)}))
 			}
 		}
 		if len(answers) == 0 {
@@ -303,17 +330,26 @@ func mdnsRespond(ctx context.Context, conn *net.UDPConn, ip4 net.IP, ip6Addrs []
 		case quBitSet:
 			// RFC 6762 §6.7: unicast reply for QU queries; mDNS wire format.
 			if _, err := conn.WriteToUDP(packed, src); err != nil {
-				log.Printf("[phone-intake] mDNS: unicast write error to %s: %v", src, err)
+				msg := fmt.Sprintf("mDNS: unicast write error to %s: %v", src, err)
+				log.Printf("[phone-intake] %s", msg)
+				emit.Emit(activity.NewPhoneEvent(activity.SeverityWarning, "mdns-write-error", msg,
+					map[string]any{"dst": src.String(), "error": err.Error()}))
 			}
 		case isLegacy:
 			// RFC 6762 §6.7: legacy/one-shot query → unicast reply with question echoed.
 			if _, err := conn.WriteToUDP(packed, src); err != nil {
-				log.Printf("[phone-intake] mDNS: unicast write error to %s: %v", src, err)
+				msg := fmt.Sprintf("mDNS: unicast write error to %s: %v", src, err)
+				log.Printf("[phone-intake] %s", msg)
+				emit.Emit(activity.NewPhoneEvent(activity.SeverityWarning, "mdns-write-error", msg,
+					map[string]any{"dst": src.String(), "error": err.Error()}))
 			}
 		default:
 			// Normal mDNS query from port 5353 → multicast reply.
 			if _, err := conn.WriteToUDP(packed, mdnsGroupUDPAddr); err != nil {
-				log.Printf("[phone-intake] mDNS: multicast write error: %v", err)
+				msg := fmt.Sprintf("mDNS: multicast write error: %v", err)
+				log.Printf("[phone-intake] %s", msg)
+				emit.Emit(activity.NewPhoneEvent(activity.SeverityWarning, "mdns-write-error", msg,
+					map[string]any{"error": err.Error()}))
 			}
 		}
 	}
