@@ -7,7 +7,7 @@
 
   type ConsoleDomain = 'activity' | 'sourcing' | 'phone';
 
-  let activeTab: ActivityDomain = $state('activity');
+  let activeTab: ConsoleDomain = $state('activity');
   let expanded = $state(false);
   let phoneIntakeActive = $state(false);
 
@@ -115,8 +115,24 @@
     };
   }
 
+  let copiedEventId: string | null = $state(null);
+
   function toggleEventDetails(id: string) {
     expandedEventId = expandedEventId === id ? null : id;
+  }
+
+  async function copyLogLine(event: ActivityEvent) {
+    const { id, ...eventWithoutId } = event;
+    const text = JSON.stringify(eventWithoutId, null, 2);
+    try {
+      await navigator.clipboard.writeText(text);
+      copiedEventId = event.id;
+      setTimeout(() => {
+        if (copiedEventId === event.id) copiedEventId = null;
+      }, 1500);
+    } catch {
+      // ignore failures silently; no copy feedback needed
+    }
   }
 
   async function refreshPhoneIntakeInfo() {
@@ -229,7 +245,7 @@
         type="button"
         class="action-btn {(activeTab === 'activity' && expanded) ? 'active' : ''}"
         aria-label="Open activity console"
-        on:click={() => toggleConsole('activity')}
+        onclick={() => toggleConsole('activity')}
       >
         <svg viewBox="0 0 20 20" fill="currentColor" class="action-icon">
           <path d="M4 14h3V6H4zm5 0h3V9H9zm5 0h3V4h-3z" />
@@ -242,7 +258,7 @@
         type="button"
         class="action-btn {(activeTab === 'sourcing' && expanded) ? 'active' : ''}"
         aria-label="Open sourcing console"
-        on:click={() => toggleConsole('sourcing')}
+        onclick={() => toggleConsole('sourcing')}
       >
         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="action-icon">
           <circle cx="8" cy="8" r="4" />
@@ -256,7 +272,7 @@
         type="button"
         class="action-btn phone-btn {(activeTab === 'phone' && expanded) ? 'active' : ''} {phoneIntakeActive ? 'phone-enabled' : ''}"
         aria-label="Open phone intake console"
-        on:click={() => toggleConsole('phone')}
+        onclick={() => toggleConsole('phone')}
       >
         <svg viewBox="0 0 20 20" fill="currentColor" class="action-icon">
           <path d="M7 2a2 2 0 00-2 2v12a2 2 0 002 2h6a2 2 0 002-2V4a2 2 0 00-2-2H7zm3 14a1 1 0 100-2 1 1 0 000 2z" />
@@ -281,20 +297,50 @@
           {/if}
         </div>
       </div>
-      <div class="panel-content" bind:this={panelContentEl} on:scroll={handlePanelScroll}>
+      <div class="panel-content" bind:this={panelContentEl} onscroll={handlePanelScroll}>
         {#if visibleEventsForTab().length === 0}
           <div class="empty-msg">{emptyMessageForTab(activeTab)}</div>
         {:else}
           <div class="event-list">
             {#each visibleEventsForTab() as event}
-              <button
-                type="button"
+              <div
                 class="event-line {badgeClass(event.severity)} {expandedEventId === event.id ? 'selected' : ''}"
+                role="button"
+                tabindex="0"
                 aria-expanded={expandedEventId === event.id}
-                on:click={() => toggleEventDetails(event.id)}
+                onclick={() => toggleEventDetails(event.id)}
+                onkeydown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggleEventDetails(event.id);
+                  }
+                }}
               >
                 <span class="event-text">{formatLogLine(event)}</span>
-              </button>
+                <span
+                  class="copy-btn"
+                  role="button"
+                  tabindex="0"
+                  aria-label="Copy event JSON"
+                  onclick={(e) => { e.stopPropagation(); copyLogLine(event); }}
+                  onkeydown={(e) => {
+                    e.stopPropagation();
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      copyLogLine(event);
+                    }
+                  }}
+                >
+                  {#if copiedEventId === event.id}
+                    Copied
+                  {:else}
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="copy-icon">
+                      <rect x="8" y="4" width="8" height="10" rx="1" />
+                      <path d="M6 8H5a2 2 0 00-2 2v6a2 2 0 002 2h6a2 2 0 002-2v-1" />
+                    </svg>
+                  {/if}
+                </span>
+              </div>
               {#if expandedEventId === event.id && event.metadata}
                 <div class="event-details">
                   <pre>{formatMetadataJSON(event.metadata)}</pre>
@@ -433,11 +479,13 @@
   }
 
   .event-line {
-    all: unset;
+    position: relative;
     box-sizing: border-box;
-    display: block;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
     width: 100%;
-    padding: 5px 10px;
+    padding: 5px 44px 5px 10px;
     cursor: pointer;
     background: transparent;
     border: 1px solid transparent;
@@ -451,6 +499,53 @@
 
   .event-line:hover {
     background: rgba(255, 255, 255, 0.04);
+  }
+
+  .event-line:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.18);
+    outline-offset: 2px;
+  }
+
+  .event-text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .copy-btn {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--color-text-secondary);
+    font-size: 10px;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+    opacity: 0;
+  }
+
+  .copy-btn:hover,
+  .copy-btn:focus-visible {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--color-text-primary);
+    outline: none;
+  }
+
+  .event-line:hover .copy-btn {
+    opacity: 1;
+  }
+
+  .copy-icon {
+    width: 14px;
+    height: 14px;
   }
 
   .event-line.selected {
