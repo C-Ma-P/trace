@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 
 	"sync"
@@ -75,6 +76,52 @@ func NewServer(
 	}
 }
 
+// ---------- DIAG: temporary connection-level diagnostics ----------
+// These types add narrow log lines to answer: did Chrome ever reach TCP/TLS/HTTP?
+// Remove diagListener, diagConn, and diagHandler (and their call sites) once answered.
+
+// diagConn wraps a net.Conn and logs TLS handshake completion.
+// Accept logs the TCP connection; diagConn.Read logs the first byte after TLS,
+// which means the TLS handshake completed and the remote end has sent data.
+type diagConn struct {
+	net.Conn
+	tlsLogged bool
+}
+
+func (c *diagConn) Read(b []byte) (int, error) {
+	n, err := c.Conn.Read(b)
+	if !c.tlsLogged && n > 0 {
+		c.tlsLogged = true
+		log.Printf("[phone-intake] DIAG tls-data: first bytes received from %s (TLS handshake complete)", c.Conn.RemoteAddr())
+	}
+	return n, err
+}
+
+// diagListener wraps a net.Listener and logs each accepted TCP connection.
+// A log line here means the remote end completed the TCP three-way handshake.
+// TLS negotiation and the HTTP request have NOT happened yet at this point.
+type diagListener struct{ net.Listener }
+
+func (l diagListener) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
+	if err == nil {
+		log.Printf("[phone-intake] DIAG tcp-accept: connection from %s", conn.RemoteAddr())
+		return &diagConn{Conn: conn}, nil
+	}
+	return conn, err
+}
+
+// diagHandler wraps an http.Handler and logs every HTTP request that arrives.
+// A log line here means TCP + TLS both succeeded and Chrome sent an HTTP request.
+func diagHandler(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("[phone-intake] DIAG http-request: %s %s (host=%s remote=%s)", r.Method, r.URL.Path, r.Host, r.RemoteAddr)
+		h.ServeHTTP(w, r)
+	})
+}
+
+// ---------- end DIAG ----------
+
 func (s *Server) Start() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -106,7 +153,8 @@ func (s *Server) Start() error {
 	mux.HandleFunc(prefix+"/api/confirm", s.handleConfirm)
 
 	s.httpSrv = &http.Server{
-		Handler:      mux,
+		// DIAG: diagHandler logs every HTTP request; remove after Chrome reach is confirmed.
+		Handler:      diagHandler(mux),
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
 	}
@@ -116,7 +164,8 @@ func (s *Server) Start() error {
 	url := s.phoneURLLocked()
 	go func() {
 		log.Printf("[phone-intake] serving on :%d → %s", s.port, url)
-		if err := s.httpSrv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		// DIAG: diagListener logs each TCP accept; remove after Chrome reach is confirmed.
+		if err := s.httpSrv.Serve(diagListener{ln}); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			msg := fmt.Sprintf("Phone intake server error: %v", err)
 			log.Printf("[phone-intake] server error: %v", err)
 			s.emitter.Emit(activity.NewPhoneEvent(activity.SeverityError, "server-error", msg,

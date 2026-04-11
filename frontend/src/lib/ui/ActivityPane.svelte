@@ -367,7 +367,7 @@
     align-items: center;
     justify-content: space-between;
     min-height: 44px;
-    padding: 0 14px;
+    padding: 0 0 0 14px;
     gap: 12px;
     color: var(--color-text-secondary);
     background: var(--color-bg-surface);
