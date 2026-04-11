@@ -15,8 +15,10 @@ import (
 	"sync"
 	"time"
 
+	"trace/internal/activity"
 	"trace/internal/domain"
 	"trace/internal/service"
+	"trace/internal/sourcing"
 )
 
 const (
@@ -30,6 +32,7 @@ type Server struct {
 	svc     *service.Service
 	bags    domain.InventoryBagRepository
 	comps   domain.ComponentRepository
+	emitter activity.Emitter
 	token   string
 	port    int
 	mu      sync.Mutex
@@ -46,15 +49,20 @@ func NewServer(
 	comps domain.ComponentRepository,
 	bags domain.InventoryBagRepository,
 	port int,
+	emitter activity.Emitter,
 ) *Server {
 	if port == 0 {
 		port = defaultPort
+	}
+	if emitter == nil {
+		emitter = activity.NopEmitter
 	}
 	token := generateToken()
 	return &Server{
 		svc:     svc,
 		bags:    bags,
 		comps:   comps,
+		emitter: emitter,
 		token:   token,
 		port:    port,
 		lanIP:   detectLANIP(),
@@ -97,6 +105,7 @@ func (s *Server) Start() error {
 		WriteTimeout: 30 * time.Second,
 	}
 	s.running = true
+	s.emitter.Emit(activity.NewPhoneEvent(activity.SeveritySuccess, "server-started", "Phone intake server started", map[string]any{"port": s.port, "url": s.PhoneURL()}))
 
 	go func() {
 		log.Printf("[phone-intake] serving on :%d → %s", s.port, s.PhoneURL())
@@ -115,8 +124,13 @@ func (s *Server) Start() error {
 func (s *Server) Stop() {
 	s.mu.Lock()
 	srv := s.httpSrv
+	wasRunning := s.running
 	s.running = false
 	s.mu.Unlock()
+
+	if wasRunning {
+		s.emitter.Emit(activity.NewPhoneEvent(activity.SeverityInfo, "server-stopped", "Phone intake server stopped", map[string]any{"port": s.port}))
+	}
 
 	if srv != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -206,10 +220,10 @@ func (s *Server) handleScanPost(w http.ResponseWriter, r *http.Request) {
 
 	var vendorPartID, quantity string
 	switch req.Vendor {
-	case "LCSC":
+	case sourcing.ProviderLCSC:
 		vendorPartID, quantity = parseLcscBarcode(req.RawValue)
 		log.Printf("[phone-intake] LCSC scan: partID=%s qty=%s", vendorPartID, quantity)
-	case "Mouser":
+	case sourcing.ProviderMouser:
 		vendorPartID, quantity = parseMouserBarcode(req.RawValue)
 		log.Printf("[phone-intake] Mouser scan: part=%s qty=%s", vendorPartID, quantity)
 	default:
@@ -230,30 +244,40 @@ func (s *Server) handleScanPost(w http.ResponseWriter, r *http.Request) {
 
 	resp := ScanResponse{OK: true, ID: id, Quantity: quantity}
 
+	s.emitter.Emit(activity.NewPhoneEvent(activity.SeverityInfo, "scan-received", "Phone scan received", map[string]any{"vendor": req.Vendor, "format": req.Format, "rawValue": req.RawValue, "quantity": quantity}))
+
 	if vendorPartID != "" {
 		offer, err := s.svc.LookupVendorPartID(r.Context(), req.Vendor, vendorPartID)
 		if err != nil {
 			scan.Error = err.Error()
 			resp.ResolveError = err.Error()
+			s.emitter.Emit(activity.NewPhoneEvent(activity.SeverityWarning, "lookup-failed", "Vendor lookup failed", map[string]any{"vendor": req.Vendor, "partId": vendorPartID, "error": err.Error()}))
 			log.Printf("[phone-intake] lookup failed vendor=%s partID=%s: %v", req.Vendor, vendorPartID, err)
 		} else {
 			// Populate display data from the offer without touching the DB.
 			// Component creation is deferred until handleConfirm.
 			resolved := &ResolvedComponent{
-				MPN:          offer.MPN,
-				Manufacturer: offer.Manufacturer,
-				Package:      offer.Package,
-				Description:  offer.Description,
-				ImageURL:     offer.ImageURL,
-				ProductURL:   offer.ProductURL,
+				MPN:             offer.MPN,
+				Manufacturer:    offer.Manufacturer,
+				Package:         offer.Package,
+				Description:     offer.Description,
+				ImageURL:        offer.ImageURL,
+				ProductURL:      offer.ProductURL,
+				HasSymbol:       offer.HasSymbol,
+				HasFootprint:    offer.HasFootprint,
+				HasDatasheet:    offer.HasDatasheet,
+				AssetProbeState: string(offer.AssetProbeState),
+				AssetProbeError: offer.AssetProbeError,
 			}
 			scan.Resolved = resolved
 			scan.Offer = &offer
 			resp.Resolved = resolved
+			s.emitter.Emit(activity.NewPhoneEvent(activity.SeveritySuccess, "lookup-succeeded", "Vendor lookup succeeded", map[string]any{"vendor": req.Vendor, "partId": vendorPartID, "mpn": offer.MPN}))
 		}
 	} else {
 		scan.Error = "no part ID found in barcode"
 		resp.ResolveError = scan.Error
+		s.emitter.Emit(activity.NewPhoneEvent(activity.SeverityWarning, "scan-parse-failed", "Phone scan parse failed", map[string]any{"vendor": req.Vendor, "format": req.Format, "rawValue": req.RawValue}))
 	}
 
 	s.mu.Lock()
@@ -331,6 +355,7 @@ func (s *Server) handleConfirm(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	s.emitter.Emit(activity.NewPhoneEvent(activity.SeveritySuccess, "scan-imported", "Phone scan imported", map[string]any{"scanId": req.ID, "vendor": scan.Vendor, "componentId": component.ID, "quantity": req.Quantity}))
 	log.Printf("[phone-intake] confirmed scan %s vendor=%s componentID=%s qty=%d", req.ID, scan.Vendor, component.ID, req.Quantity)
 	writeJSON(w, http.StatusOK, ConfirmResponse{OK: true})
 }

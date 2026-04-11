@@ -8,6 +8,7 @@
   import ProjectsWorkspace from './lib/projects/ProjectsWorkspace.svelte';
   import { notifyAppReady } from './lib/appReady';
   import { getStartupStatus } from './lib/backend';
+  import ActivityPane from './lib/ui/ActivityPane.svelte';
   import { openProjectWindow, openProjectWindowKeepLauncher } from './lib/windowService';
 
   type WindowMode = 'launcher' | 'project' | 'preferences';
@@ -16,6 +17,7 @@
   const params = new URLSearchParams(window.location.search);
   const mode = (params.get('mode') as WindowMode) || 'launcher';
   const initialProjectId = params.get('projectId');
+  const initialComponentId = params.get('componentId');
 
   function parseStartupState(value: string | null): StartupState {
     if (value === 'ready' || value === 'failed') {
@@ -28,7 +30,9 @@
 
   console.log(`[startup/frontend +${Math.round(performance.now())}ms] App.svelte init mode=${mode} startup=${startup}`);
 
-  let currentSection: 'home' | 'components' = $state(mode === 'project' ? 'home' : 'components');
+  let currentSection: 'home' | 'components' = $state(
+    mode === 'project' && !initialComponentId ? 'home' : 'components'
+  );
   // For ready/failed, the startup state is known immediately from the URL — no gate needed.
   // Only startup=unknown requires an async backend check before rendering.
   let startupChecked = $state(startup !== 'unknown');
@@ -143,13 +147,16 @@
   {:else}
     <div class="app-layout">
       <Sidebar bind:currentSection />
-      <main class="main-content">
-        {#if currentSection === 'home'}
-          <ProjectsWorkspace requestedProjectId={initialProjectId ?? null} />
-        {:else}
-          <ComponentsWorkspace />
-        {/if}
-      </main>
+      <div class="workspace-frame">
+        <main class="main-content">
+          {#if currentSection === 'home'}
+            <ProjectsWorkspace requestedProjectId={initialProjectId ?? null} />
+          {:else}
+            <ComponentsWorkspace requestedComponentId={initialComponentId ?? null} />
+          {/if}
+        </main>
+        <ActivityPane />
+      </div>
     </div>
   {/if}
 {/if}
@@ -161,6 +168,13 @@
   }
   .app-layout {
     display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+  .workspace-frame {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
     height: 100vh;
     overflow: hidden;
   }

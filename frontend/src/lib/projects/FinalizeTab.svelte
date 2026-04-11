@@ -198,6 +198,13 @@
     }
   }
 
+  function openComponent(componentId: string | null) {
+    if (!componentId) return;
+    window.location.href = `${window.location.pathname}?mode=components&componentId=${encodeURIComponent(
+      componentId,
+    )}`;
+  }
+
   // ---- Helpers ----
 
   function formatPrice(offer: SavedSupplierOffer): string {
@@ -235,6 +242,13 @@
     if (origin === 'provider') return 'Provider';
     if (origin === 'imported_from_supplier') return 'Imported';
     return 'Local';
+  }
+
+  function providerOrOriginLabel(c: PartCandidate): string {
+    if (c.origin === 'provider' && c.sourceOffer?.provider) {
+      return c.sourceOffer.provider;
+    }
+    return originLabel(c.origin);
   }
 
   function preferredCandidate(rp: RequirementPlan): PartCandidate | undefined {
@@ -372,7 +386,7 @@
                       <div class="preferred-field">
                         <span class="field-label">Origin</span>
                         <span class="field-value">
-                          <span class="origin-badge origin-{preferred.origin}">{originLabel(preferred.origin)}</span>
+                          <span class="origin-badge origin-{preferred.origin}">{providerOrOriginLabel(preferred)}</span>
                         </span>
                       </div>
                       {#if preferred.sourceOffer}
@@ -380,6 +394,28 @@
                           <span class="field-label">Supplier</span>
                           <span class="field-value"><span class="provider-badge">{preferred.sourceOffer.provider}</span></span>
                         </div>
+                        <div class="preferred-field">
+                          <span class="field-label">Available Assets</span>
+                          <span class="field-value">
+                            <div class="asset-badges">
+                              {#if preferred.sourceOffer.hasSymbol}<span class="asset-badge">Symbol</span>{/if}
+                              {#if preferred.sourceOffer.hasFootprint}<span class="asset-badge">Footprint</span>{/if}
+                              {#if preferred.sourceOffer.hasDatasheet}<span class="asset-badge">Datasheet</span>{/if}
+                              {#if !preferred.sourceOffer.hasSymbol && !preferred.sourceOffer.hasFootprint && !preferred.sourceOffer.hasDatasheet}
+                                <span class="muted-cell">None</span>
+                              {/if}
+                            </div>
+                          </span>
+                        </div>
+                        {#if preferred.sourceOffer.assetProbeState && preferred.sourceOffer.assetProbeState !== 'probed'}
+                          <div class="preferred-field">
+                            <span class="field-label">Probe status</span>
+                            <span class="field-value">{preferred.sourceOffer.assetProbeState}</span>
+                          </div>
+                        {/if}
+                        {#if preferred.sourceOffer.assetProbeError}
+                          <div class="preferred-field error-text">Probe error: {preferred.sourceOffer.assetProbeError}</div>
+                        {/if}
                         {#if preferred.sourceOffer.unitPrice !== null}
                           <div class="preferred-field">
                             <span class="field-label">Price</span>
@@ -434,6 +470,14 @@
                           Open URL
                         </button>
                       {/if}
+                      {#if preferred.componentId}
+                        <button
+                          class="btn btn-ghost btn-sm"
+                          onclick={() => openComponent(preferred.componentId)}
+                        >
+                          Open Component
+                        </button>
+                      {/if}
                       <button
                         class="btn btn-ghost btn-sm"
                         onclick={() => handleDemoteCandidate(rp.requirement.id, preferred.id)}
@@ -463,6 +507,8 @@
                         <th>MPN</th>
                         <th>Manufacturer</th>
                         <th>Package</th>
+                        <th>Provider</th>
+                        <th>Assets</th>
                         <th>Origin</th>
                         <th></th>
                       </tr>
@@ -473,7 +519,28 @@
                           <td class="mpn-cell">{candidateDisplayMpn(alt)}</td>
                           <td>{candidateDisplayManufacturer(alt)}</td>
                           <td>{candidateDisplayPackage(alt)}</td>
-                          <td><span class="origin-badge origin-{alt.origin}">{originLabel(alt.origin)}</span></td>
+                          <td>
+                            {#if alt.sourceOffer?.provider}
+                              <span class="provider-badge">{alt.sourceOffer.provider}</span>
+                            {:else}
+                              —
+                            {/if}
+                          </td>
+                          <td>
+                            {#if alt.sourceOffer}
+                              <div class="asset-badges">
+                                {#if alt.sourceOffer.hasSymbol}<span class="asset-badge">Symbol</span>{/if}
+                                {#if alt.sourceOffer.hasFootprint}<span class="asset-badge">Footprint</span>{/if}
+                                {#if alt.sourceOffer.hasDatasheet}<span class="asset-badge">Datasheet</span>{/if}
+                                {#if !alt.sourceOffer.hasSymbol && !alt.sourceOffer.hasFootprint && !alt.sourceOffer.hasDatasheet}
+                                  <span class="muted-cell">None</span>
+                                {/if}
+                              </div>
+                            {:else}
+                              —
+                            {/if}
+                          </td>
+                          <td><span class="origin-badge origin-{alt.origin}">{providerOrOriginLabel(alt)}</span></td>
                           <td class="action-cell">
                             {#if alt.origin === 'provider'}
                               <button
@@ -497,6 +564,14 @@
                                 onclick={() => openUrl(alt.sourceOffer!.productUrl)}
                               >
                                 Open URL
+                              </button>
+                            {/if}
+                            {#if alt.componentId}
+                              <button
+                                class="btn btn-ghost btn-sm"
+                                onclick={() => openComponent(alt.componentId)}
+                              >
+                                Open Component
                               </button>
                             {/if}
                             <button
@@ -802,6 +877,9 @@
     font-size: 11px;
     border-bottom: 1px solid var(--color-border);
   }
+  .match-table th:last-child {
+    width: 220px;
+  }
   .match-table td {
     padding: 6px 10px;
     border-bottom: 1px solid var(--color-border);
@@ -820,7 +898,10 @@
     display: flex;
     gap: 6px;
     align-items: center;
+    justify-content: flex-end;
     flex-wrap: wrap;
+    min-width: 180px;
+    text-align: right;
   }
   .origin-badge {
     display: inline-flex;
@@ -852,6 +933,19 @@
     font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
+  }
+  .asset-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .asset-badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    color: var(--color-text-secondary);
+    background: var(--color-bg-muted);
+    font-weight: 600;
   }
   .currency-label {
     font-size: 10px;

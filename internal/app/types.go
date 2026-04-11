@@ -181,6 +181,11 @@ type SupplierOfferResponse struct {
 	DatasheetURL       string            `json:"datasheetUrl"`
 	ImageURL           string            `json:"imageUrl"`
 	Lifecycle          string            `json:"lifecycle"`
+	HasSymbol          bool              `json:"hasSymbol"`
+	HasFootprint       bool              `json:"hasFootprint"`
+	HasDatasheet       bool              `json:"hasDatasheet"`
+	AssetProbeState    string            `json:"assetProbeState"`
+	AssetProbeError    string            `json:"assetProbeError,omitempty"`
 	MatchScore         int               `json:"matchScore"`
 	MatchReasons       []string          `json:"matchReasons"`
 	Raw                map[string]string `json:"raw,omitempty"`
@@ -512,36 +517,48 @@ type PartCandidateResponse struct {
 // --- Saved Supplier Offers ---
 
 type SaveSupplierOfferInput struct {
-	RequirementID  string   `json:"requirementId"`
-	Provider       string   `json:"provider"`
-	ProviderPartID string   `json:"providerPartId"`
-	ProductURL     string   `json:"productUrl"`
-	ImageURL       string   `json:"imageUrl"`
-	Manufacturer   string   `json:"manufacturer"`
-	MPN            string   `json:"mpn"`
-	Description    string   `json:"description"`
-	Package        string   `json:"package"`
-	Stock          *int     `json:"stock"`
-	MOQ            *int     `json:"moq"`
-	UnitPrice      *float64 `json:"unitPrice"`
-	Currency       string   `json:"currency"`
+	RequirementID   string   `json:"requirementId"`
+	Provider        string   `json:"provider"`
+	ProviderPartID  string   `json:"providerPartId"`
+	ProductURL      string   `json:"productUrl"`
+	ImageURL        string   `json:"imageUrl"`
+	DatasheetURL    string   `json:"datasheetUrl"`
+	HasSymbol       bool     `json:"hasSymbol"`
+	HasFootprint    bool     `json:"hasFootprint"`
+	HasDatasheet    bool     `json:"hasDatasheet"`
+	Manufacturer    string   `json:"manufacturer"`
+	MPN             string   `json:"mpn"`
+	Description     string   `json:"description"`
+	Package         string   `json:"package"`
+	Stock           *int     `json:"stock"`
+	MOQ             *int     `json:"moq"`
+	UnitPrice       *float64 `json:"unitPrice"`
+	Currency        string   `json:"currency"`
+	AssetProbeState string   `json:"assetProbeState,omitempty"`
+	AssetProbeError string   `json:"assetProbeError,omitempty"`
 }
 
 type ImportSupplierOfferInput struct {
-	RequirementID  string   `json:"requirementId"`
-	Provider       string   `json:"provider"`
-	ProviderPartID string   `json:"providerPartId"`
-	ProductURL     string   `json:"productUrl"`
-	ImageURL       string   `json:"imageUrl"`
-	Manufacturer   string   `json:"manufacturer"`
-	MPN            string   `json:"mpn"`
-	Description    string   `json:"description"`
-	Package        string   `json:"package"`
-	Stock          *int     `json:"stock"`
-	MOQ            *int     `json:"moq"`
-	UnitPrice      *float64 `json:"unitPrice"`
-	Currency       string   `json:"currency"`
-	SetPreferred   bool     `json:"setPreferred"`
+	RequirementID   string   `json:"requirementId"`
+	Provider        string   `json:"provider"`
+	ProviderPartID  string   `json:"providerPartId"`
+	ProductURL      string   `json:"productUrl"`
+	ImageURL        string   `json:"imageUrl"`
+	DatasheetURL    string   `json:"datasheetUrl"`
+	HasSymbol       bool     `json:"hasSymbol"`
+	HasFootprint    bool     `json:"hasFootprint"`
+	HasDatasheet    bool     `json:"hasDatasheet"`
+	Manufacturer    string   `json:"manufacturer"`
+	MPN             string   `json:"mpn"`
+	Description     string   `json:"description"`
+	Package         string   `json:"package"`
+	Stock           *int     `json:"stock"`
+	MOQ             *int     `json:"moq"`
+	UnitPrice       *float64 `json:"unitPrice"`
+	Currency        string   `json:"currency"`
+	AssetProbeState string   `json:"assetProbeState,omitempty"`
+	AssetProbeError string   `json:"assetProbeError,omitempty"`
+	SetPreferred    bool     `json:"setPreferred"`
 }
 
 type SavedSupplierOfferResponse struct {
@@ -552,6 +569,10 @@ type SavedSupplierOfferResponse struct {
 	ProviderPartID    string   `json:"providerPartId"`
 	ProductURL        string   `json:"productUrl"`
 	ImageURL          string   `json:"imageUrl"`
+	DatasheetURL      string   `json:"datasheetUrl"`
+	HasSymbol         bool     `json:"hasSymbol"`
+	HasFootprint      bool     `json:"hasFootprint"`
+	HasDatasheet      bool     `json:"hasDatasheet"`
 	Manufacturer      string   `json:"manufacturer"`
 	MPN               string   `json:"mpn"`
 	Description       string   `json:"description"`
@@ -560,6 +581,9 @@ type SavedSupplierOfferResponse struct {
 	MOQ               *int     `json:"moq"`
 	UnitPrice         *float64 `json:"unitPrice"`
 	Currency          string   `json:"currency"`
+	AssetProbeState   string   `json:"assetProbeState"`
+	AssetProbeError   string   `json:"assetProbeError,omitempty"`
+	ProbeCompletedAt  string   `json:"probeCompletedAt,omitempty"`
 	LinkedComponentID *string  `json:"linkedComponentId"`
 	CapturedAt        string   `json:"capturedAt"`
 	CreatedAt         string   `json:"createdAt"`
@@ -571,18 +595,24 @@ type ImportSupplierOfferResponse struct {
 }
 
 type AddProviderCandidateInput struct {
-	RequirementID  string   `json:"requirementId"`
-	Provider       string   `json:"provider"`
-	ProviderPartID string   `json:"providerPartId"`
-	ProductURL     string   `json:"productUrl"`
-	ImageURL       string   `json:"imageUrl"`
-	Manufacturer   string   `json:"manufacturer"`
-	MPN            string   `json:"mpn"`
-	Description    string   `json:"description"`
-	Package        string   `json:"package"`
-	Stock          *int     `json:"stock"`
-	MOQ            *int     `json:"moq"`
-	UnitPrice      *float64 `json:"unitPrice"`
-	Currency       string   `json:"currency"`
-	SetPreferred   bool     `json:"setPreferred"`
+	RequirementID   string   `json:"requirementId"`
+	Provider        string   `json:"provider"`
+	ProviderPartID  string   `json:"providerPartId"`
+	ProductURL      string   `json:"productUrl"`
+	ImageURL        string   `json:"imageUrl"`
+	DatasheetURL    string   `json:"datasheetUrl"`
+	HasSymbol       bool     `json:"hasSymbol"`
+	HasFootprint    bool     `json:"hasFootprint"`
+	HasDatasheet    bool     `json:"hasDatasheet"`
+	Manufacturer    string   `json:"manufacturer"`
+	MPN             string   `json:"mpn"`
+	Description     string   `json:"description"`
+	Package         string   `json:"package"`
+	Stock           *int     `json:"stock"`
+	MOQ             *int     `json:"moq"`
+	UnitPrice       *float64 `json:"unitPrice"`
+	Currency        string   `json:"currency"`
+	AssetProbeState string   `json:"assetProbeState,omitempty"`
+	AssetProbeError string   `json:"assetProbeError,omitempty"`
+	SetPreferred    bool     `json:"setPreferred"`
 }

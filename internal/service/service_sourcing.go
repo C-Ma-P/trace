@@ -2,47 +2,47 @@ package service
 
 import (
 	"context"
-	"strings"
-
 	"fmt"
+	"strings"
 
 	"trace/internal/domain"
 	"trace/internal/sourcing"
 )
 
 func (s *Service) LookupVendorPartID(ctx context.Context, vendor, partID string) (sourcing.SupplierOffer, error) {
-	svc, err := s.resolveSourcingService(ctx)
+	coord, err := s.resolveSourcingCoordinator(ctx)
 	if err != nil {
 		return sourcing.SupplierOffer{}, err
 	}
-	return svc.LookupByVendorPartID(ctx, vendor, partID)
+	return coord.LookupByVendorPartID(ctx, vendor, partID)
 }
 
-func (s *Service) resolveSourcingService(ctx context.Context) (*sourcing.Service, error) {
+func (s *Service) resolveSourcingCoordinator(ctx context.Context) (*sourcing.Coordinator, error) {
 	if s.supplierConfig != nil {
-		return s.supplierConfig.BuildSourcingService(ctx)
+		return s.supplierConfig.GetSourcingCoordinator(ctx)
 	}
 	if s.sourcing != nil {
-		return s.sourcing, nil
+		s.sourcingCoordinatorMu.Lock()
+		defer s.sourcingCoordinatorMu.Unlock()
+		if s.sourcingCoordinator == nil {
+			s.sourcingCoordinator = sourcing.NewCoordinatorFromService(s.sourcing)
+		}
+		return s.sourcingCoordinator, nil
 	}
 	return nil, fmt.Errorf("sourcing not configured")
 }
 
 // SourcingProviders returns metadata about each configured sourcing provider.
 func (s *Service) SourcingProviders(ctx context.Context) ([]sourcing.ProviderInfo, error) {
-	svc, err := s.resolveSourcingService(ctx)
+	coord, err := s.resolveSourcingCoordinator(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return svc.Providers(), nil
+	return coord.Providers(), nil
 }
 
 // SourceRequirementFromProvider searches a single named provider for the given requirement.
 func (s *Service) SourceRequirementFromProvider(ctx context.Context, requirementID, providerName string) (sourcing.SourceResult, error) {
-	if s.sourcing == nil && s.supplierConfig == nil {
-		return sourcing.SourceResult{}, fmt.Errorf("supplier sourcing not configured")
-	}
-
 	requirement, err := s.projects.GetRequirement(ctx, requirementID)
 	if err != nil {
 		return sourcing.SourceResult{}, err
@@ -59,11 +59,11 @@ func (s *Service) SourceRequirementFromProvider(ctx context.Context, requirement
 	}
 
 	query := sourcing.BuildRequirementQuery(requirement, selectedDefinition)
-	sourcingSvc, err := s.resolveSourcingService(ctx)
+	coord, err := s.resolveSourcingCoordinator(ctx)
 	if err != nil {
 		return sourcing.SourceResult{}, err
 	}
-	return sourcingSvc.SourceFromProvider(ctx, query, providerName), nil
+	return coord.SourceFromProvider(ctx, query, providerName), nil
 }
 
 func (s *Service) ResolveComponentFromOffer(ctx context.Context, offer sourcing.SupplierOffer) (domain.Component, error) {
@@ -104,10 +104,6 @@ func categoryFromCatalog(parentCatalog string) domain.Category {
 }
 
 func (s *Service) SourceRequirement(ctx context.Context, requirementID string) (sourcing.SourceResult, error) {
-	if s.sourcing == nil && s.supplierConfig == nil {
-		return sourcing.SourceResult{}, fmt.Errorf("supplier sourcing not configured")
-	}
-
 	requirement, err := s.projects.GetRequirement(ctx, requirementID)
 	if err != nil {
 		return sourcing.SourceResult{}, err
@@ -124,12 +120,17 @@ func (s *Service) SourceRequirement(ctx context.Context, requirementID string) (
 	}
 
 	query := sourcing.BuildRequirementQuery(requirement, selectedDefinition)
-	if s.supplierConfig != nil {
-		sourcingSvc, err := s.supplierConfig.BuildSourcingService(ctx)
-		if err != nil {
-			return sourcing.SourceResult{}, err
-		}
-		return sourcingSvc.Source(ctx, query), nil
+	coord, err := s.resolveSourcingCoordinator(ctx)
+	if err != nil {
+		return sourcing.SourceResult{}, err
 	}
-	return s.sourcing.Source(ctx, query), nil
+	return coord.Source(ctx, query), nil
+}
+
+func (s *Service) ProbeSupplierOffer(ctx context.Context, offer sourcing.SupplierOffer) (sourcing.SupplierOffer, error) {
+	coord, err := s.resolveSourcingCoordinator(ctx)
+	if err != nil {
+		return sourcing.SupplierOffer{}, err
+	}
+	return coord.ProbeOffer(ctx, offer)
 }

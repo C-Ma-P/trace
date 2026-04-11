@@ -27,13 +27,18 @@ type ScanRequest struct {
 
 // ResolvedComponent holds the resolved component data for a pending scan.
 type ResolvedComponent struct {
-	ComponentID  string `json:"componentId"`
-	MPN          string `json:"mpn"`
-	Manufacturer string `json:"manufacturer"`
-	Package      string `json:"package"`
-	Description  string `json:"description"`
-	ImageURL     string `json:"imageUrl"`
-	ProductURL   string `json:"productUrl"`
+	ComponentID     string `json:"componentId"`
+	MPN             string `json:"mpn"`
+	Manufacturer    string `json:"manufacturer"`
+	Package         string `json:"package"`
+	Description     string `json:"description"`
+	ImageURL        string `json:"imageUrl"`
+	ProductURL      string `json:"productUrl"`
+	HasSymbol       bool   `json:"hasSymbol"`
+	HasFootprint    bool   `json:"hasFootprint"`
+	HasDatasheet    bool   `json:"hasDatasheet"`
+	AssetProbeState string `json:"assetProbeState,omitempty"`
+	AssetProbeError string `json:"assetProbeError,omitempty"`
 }
 
 // ScanResponse is returned after processing a scan.

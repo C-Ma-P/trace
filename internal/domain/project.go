@@ -170,24 +170,31 @@ type ProjectPartCandidate struct {
 }
 
 type SavedSupplierOffer struct {
-	ID                string    `db:"id"`
-	ProjectID         string    `db:"project_id"`
-	RequirementID     string    `db:"requirement_id"`
-	Provider          string    `db:"provider"`
-	ProviderPartID    string    `db:"provider_part_id"`
-	ProductURL        string    `db:"product_url"`
-	ImageURL          string    `db:"image_url"`
-	Manufacturer      string    `db:"manufacturer"`
-	MPN               string    `db:"mpn"`
-	Description       string    `db:"description"`
-	Package           string    `db:"package"`
-	Stock             *int      `db:"stock"`
-	MOQ               *int      `db:"moq"`
-	UnitPrice         *float64  `db:"unit_price"`
-	Currency          string    `db:"currency"`
-	LinkedComponentID *string   `db:"linked_component_id"`
-	CapturedAt        time.Time `db:"captured_at"`
-	CreatedAt         time.Time `db:"created_at"`
+	ID                string     `db:"id"`
+	ProjectID         string     `db:"project_id"`
+	RequirementID     string     `db:"requirement_id"`
+	Provider          string     `db:"provider"`
+	ProviderPartID    string     `db:"provider_part_id"`
+	ProductURL        string     `db:"product_url"`
+	ImageURL          string     `db:"image_url"`
+	DatasheetURL      string     `db:"datasheet_url"`
+	HasSymbol         bool       `db:"has_symbol"`
+	HasFootprint      bool       `db:"has_footprint"`
+	HasDatasheet      bool       `db:"has_datasheet"`
+	Manufacturer      string     `db:"manufacturer"`
+	MPN               string     `db:"mpn"`
+	Description       string     `db:"description"`
+	Package           string     `db:"package"`
+	Stock             *int       `db:"stock"`
+	MOQ               *int       `db:"moq"`
+	UnitPrice         *float64   `db:"unit_price"`
+	Currency          string     `db:"currency"`
+	AssetProbeState   string     `db:"asset_probe_state"`
+	AssetProbeError   string     `db:"asset_probe_error"`
+	ProbeCompletedAt  *time.Time `db:"probe_completed_at"`
+	LinkedComponentID *string    `db:"linked_component_id"`
+	CapturedAt        time.Time  `db:"captured_at"`
+	CreatedAt         time.Time  `db:"created_at"`
 }
 
 func derefString(value *string) string {

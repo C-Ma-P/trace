@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"trace/internal/activity"
 	"trace/internal/secretstore"
 )
 
@@ -76,7 +77,7 @@ func (f *fakeSecretStore) Available() bool {
 func TestSavePreferences_PersistsNonSecretValuesAndSecrets(t *testing.T) {
 	repo := newFakePreferenceRepo()
 	secrets := newFakeSecretStore(true)
-	svc := NewManager(repo, secrets, nil)
+	svc := NewManager(repo, secrets, nil, activity.NopEmitter)
 	clientSecret := "top-secret"
 
 	prefs, err := svc.SavePreferences(context.Background(), UpdateInput{
@@ -98,6 +99,9 @@ func TestSavePreferences_PersistsNonSecretValuesAndSecrets(t *testing.T) {
 
 	if got := repo.values[prefDigiKeyClientID]; got != "trace-client" {
 		t.Fatalf("expected client ID to be persisted, got %q", got)
+	}
+	if got := secrets.values[secretDigiKeyClientID]; got != "trace-client" {
+		t.Fatalf("expected client ID to be written to secret store, got %q", got)
 	}
 	if got := repo.values[prefMouserEnabled]; got != "false" {
 		t.Fatalf("expected mouser enabled flag to be persisted, got %q", got)
@@ -130,7 +134,7 @@ func TestResolve_PrefersSavedValuesAndFallsBackToEnvironment(t *testing.T) {
 		"MOUSER_API_KEY":        "env-mouser",
 		"LCSC_CURRENCY":         "EUR",
 	}
-	svc := NewManager(repo, secrets, func(key string) string { return env[key] })
+	svc := NewManager(repo, secrets, func(key string) string { return env[key] }, activity.NopEmitter)
 
 	resolved, err := svc.Resolve(context.Background())
 	if err != nil {
@@ -157,12 +161,40 @@ func TestResolve_PrefersSavedValuesAndFallsBackToEnvironment(t *testing.T) {
 	}
 }
 
+func TestResolve_UsesSecretStoredDigiKeyClientIDWhenPrefsCleared(t *testing.T) {
+	repo := newFakePreferenceRepo()
+	repo.values[prefDigiKeyEnabled] = "true"
+	secrets := newFakeSecretStore(true)
+	secrets.values[secretDigiKeyClientID] = "stored-client"
+	secrets.values[secretDigiKeyClientSecret] = "stored-secret"
+	env := map[string]string{
+		"DIGIKEY_CLIENT_ID":     "env-client",
+		"DIGIKEY_CLIENT_SECRET": "env-secret",
+	}
+	svc := NewManager(repo, secrets, func(key string) string { return env[key] }, activity.NopEmitter)
+
+	resolved, err := svc.Resolve(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if resolved.Config.DigiKey.ClientID != "stored-client" {
+		t.Fatalf("expected secret-stored DigiKey client ID to win, got %q", resolved.Config.DigiKey.ClientID)
+	}
+	if resolved.Config.DigiKey.ClientSecret != "stored-secret" {
+		t.Fatalf("expected secret-stored DigiKey client secret to win, got %q", resolved.Config.DigiKey.ClientSecret)
+	}
+	if resolved.Preferences.DigiKey.Status.Source != "preferences" {
+		t.Fatalf("expected DigiKey status source to be preferences, got %#v", resolved.Preferences.DigiKey.Status)
+	}
+}
+
 func TestResolve_ReportsIncompleteWhenSecureStorageUnavailable(t *testing.T) {
 	repo := newFakePreferenceRepo()
 	repo.values[prefDigiKeyEnabled] = "true"
 	repo.values[prefDigiKeyClientID] = "saved-client"
 	secrets := newFakeSecretStore(false)
-	svc := NewManager(repo, secrets, nil)
+	svc := NewManager(repo, secrets, nil, activity.NopEmitter)
 
 	resolved, err := svc.Resolve(context.Background())
 	if err != nil {
@@ -189,7 +221,7 @@ func TestClearSecret_RemovesStoredSecretAndFallsBackToEnvironment(t *testing.T) 
 	secrets := newFakeSecretStore(true)
 	secrets.values[secretMouserAPIKey] = "stored-key"
 	env := map[string]string{"MOUSER_API_KEY": "env-key"}
-	svc := NewManager(repo, secrets, func(key string) string { return env[key] })
+	svc := NewManager(repo, secrets, func(key string) string { return env[key] }, activity.NopEmitter)
 
 	prefs, err := svc.ClearSecret(context.Background(), "mouser", "api_key")
 	if err != nil {

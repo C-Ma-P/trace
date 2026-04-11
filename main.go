@@ -13,6 +13,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/wailsapp/wails/v3/pkg/application"
 
+	"trace/internal/activity"
 	"trace/internal/app"
 	"trace/internal/assetsearch"
 	"trace/internal/assetsearch/providers"
@@ -51,15 +52,16 @@ func main() {
 	}
 
 	var backendApp *app.App
-	svc, assetSearchSvc, ingestSvc, easyedaSvc, db, initErr := initService(dsn)
+	activityHub := activity.NewHub(100)
+	svc, assetSearchSvc, ingestSvc, easyedaSvc, db, initErr := initService(dsn, activityHub)
 	if initErr != nil {
 		log.Printf("[startup] init failed: %v", initErr)
 		backendApp = app.NewFailed(initErr.Error())
 	} else {
 		defer db.Close()
 		backendApp = app.New(svc, assetSearchSvc, ingestSvc, easyedaSvc)
+		backendApp.SetActivityHub(activityHub)
 
-		// Phone intake server
 		store := postgres.New(db)
 		compRepo := postgres.NewComponentRepository(store)
 		bagRepo := postgres.NewBagRepository(store)
@@ -69,7 +71,7 @@ func main() {
 				intakePort = parsed
 			}
 		}
-		intakeServer := phoneintake.NewServer(svc, compRepo, bagRepo, intakePort)
+		intakeServer := phoneintake.NewServer(svc, compRepo, bagRepo, intakePort, activityHub)
 		backendApp.SetIntakeServer(intakeServer)
 		backendApp.SetBagRepo(bagRepo)
 		defer intakeServer.Stop()
@@ -180,7 +182,7 @@ func (w *WindowService) SetLauncherView(view string) error {
 	return w.controller.SetLauncherView(view)
 }
 
-func initService(dsn string) (*service.Service, *assetsearch.Service, *ingest.Service, *easyedaprovider.Service, *sqlx.DB, error) {
+func initService(dsn string, emitter activity.Emitter) (*service.Service, *assetsearch.Service, *ingest.Service, *easyedaprovider.Service, *sqlx.DB, error) {
 	ctx := context.Background()
 
 	startupLog("before DB connect")
@@ -205,7 +207,7 @@ func initService(dsn string) (*service.Service, *assetsearch.Service, *ingest.Se
 	kicadSvc := kicad.New(nil)
 	kicadCfg := kicadconfig.NewManager(prefRepo)
 	secretSvc := secretstore.NewKeyringStore("trace")
-	supplierCfg := supplierconfig.NewManager(prefRepo, secretSvc, os.Getenv)
+	supplierCfg := supplierconfig.NewManager(prefRepo, secretSvc, os.Getenv, emitter)
 	svc := service.New(compRepo, projRepo, assetRepo, kicadSvc).
 		SetKiCadConfig(kicadCfg).
 		SetSupplierConfig(supplierCfg)

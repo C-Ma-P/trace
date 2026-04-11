@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 
+	"trace/internal/activity"
 	"trace/internal/assetsearch"
 	"trace/internal/domain"
 	"trace/internal/domain/registry"
@@ -20,6 +21,7 @@ type App struct {
 	easyeda     *easyedaprovider.Service
 	launcher    *launcher.Store
 	intake      *phoneintake.Server
+	activityHub *activity.Hub
 	bagRepo     domain.InventoryBagRepository
 	initErr     string
 }

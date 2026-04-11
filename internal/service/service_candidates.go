@@ -2,11 +2,12 @@ package service
 
 import (
 	"context"
-	"strings"
-
 	"fmt"
+	"strings"
+	"time"
 
 	"trace/internal/domain"
+	"trace/internal/sourcing"
 )
 
 // --- Part Candidates ---
@@ -288,6 +289,69 @@ func (s *Service) findOrCreateComponentFromOffer(ctx context.Context, category d
 	return component, false, nil
 }
 
+func (s *Service) maybeEnrichSavedSupplierOffer(ctx context.Context, offer *domain.SavedSupplierOffer) {
+	if offer.AssetProbeState != "" && offer.AssetProbeState != string(sourcing.AssetProbeStateUnknown) {
+		return
+	}
+
+	coord, err := s.resolveSourcingCoordinator(ctx)
+	if err != nil {
+		return
+	}
+
+	probed, _ := coord.ProbeOffer(ctx, sourcing.SupplierOffer{
+		Provider:           offer.Provider,
+		Manufacturer:       offer.Manufacturer,
+		MPN:                offer.MPN,
+		SupplierPartNumber: offer.ProviderPartID,
+		Description:        offer.Description,
+		Package:            offer.Package,
+		Stock:              offer.Stock,
+		MOQ:                offer.MOQ,
+		UnitPrice:          offer.UnitPrice,
+		ProductURL:         offer.ProductURL,
+		DatasheetURL:       offer.DatasheetURL,
+		ImageURL:           offer.ImageURL,
+		HasSymbol:          offer.HasSymbol,
+		HasFootprint:       offer.HasFootprint,
+		HasDatasheet:       offer.HasDatasheet,
+		AssetProbeState:    sourcing.AssetProbeState(offer.AssetProbeState),
+		AssetProbeError:    offer.AssetProbeError,
+	})
+
+	offer.HasSymbol = probed.HasSymbol
+	offer.HasFootprint = probed.HasFootprint
+	offer.HasDatasheet = probed.HasDatasheet
+	if probed.ProductURL != "" {
+		offer.ProductURL = probed.ProductURL
+	}
+	if probed.ImageURL != "" {
+		offer.ImageURL = probed.ImageURL
+	}
+	if probed.DatasheetURL != "" {
+		offer.DatasheetURL = probed.DatasheetURL
+	}
+	if probed.Stock != nil {
+		offer.Stock = probed.Stock
+	}
+	if probed.MOQ != nil {
+		offer.MOQ = probed.MOQ
+	}
+	if probed.UnitPrice != nil {
+		offer.UnitPrice = probed.UnitPrice
+	}
+	if probed.AssetProbeState != "" {
+		offer.AssetProbeState = string(probed.AssetProbeState)
+	} else {
+		offer.AssetProbeState = string(sourcing.AssetProbeStateProbed)
+	}
+	offer.AssetProbeError = probed.AssetProbeError
+	now := time.Now().UTC()
+	offer.ProbeCompletedAt = &now
+
+	_, _ = s.projects.SaveSupplierOffer(ctx, *offer)
+}
+
 func (s *Service) AddLocalComponentAsCandidateAndSetPreferred(ctx context.Context, requirementID, componentID string) (domain.ProjectPartCandidate, error) {
 	req, err := s.projects.GetRequirement(ctx, requirementID)
 	if err != nil {
@@ -419,6 +483,8 @@ func (s *Service) ImportProviderCandidate(ctx context.Context, candidateID strin
 	if err != nil {
 		return domain.ProjectPartCandidate{}, fmt.Errorf("load backing offer: %w", err)
 	}
+	// Enrich any unknown provider-backed probe state before final import.
+	s.maybeEnrichSavedSupplierOffer(ctx, &offer)
 
 	req, err := s.projects.GetRequirement(ctx, candidate.RequirementID)
 	if err != nil {

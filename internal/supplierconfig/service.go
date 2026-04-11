@@ -7,7 +7,9 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 
+	"trace/internal/activity"
 	"trace/internal/domain"
 	"trace/internal/secretstore"
 	"trace/internal/sourcing"
@@ -28,6 +30,7 @@ const (
 	prefLCSCEnabled  = "suppliers.lcsc.enabled"
 	prefLCSCCurrency = "suppliers.lcsc.currency"
 
+	secretDigiKeyClientID     = "trace.suppliers.digikey.client_id"
 	secretDigiKeyClientSecret = "trace.suppliers.digikey.client_secret"
 	secretMouserAPIKey        = "trace.suppliers.mouser.api_key"
 )
@@ -35,9 +38,12 @@ const (
 type EnvLookup func(string) string
 
 type Manager struct {
-	prefs   domain.PreferenceRepository
-	secrets secretstore.Store
-	env     EnvLookup
+	prefs           domain.PreferenceRepository
+	secrets         secretstore.Store
+	env             EnvLookup
+	activityEmitter activity.Emitter
+	mu              sync.Mutex
+	coordinator     *sourcing.Coordinator
 }
 
 type Preferences struct {
@@ -127,11 +133,14 @@ type storedPreferences struct {
 	LCSCCurrency      string
 }
 
-func NewManager(prefs domain.PreferenceRepository, secrets secretstore.Store, env EnvLookup) *Manager {
+func NewManager(prefs domain.PreferenceRepository, secrets secretstore.Store, env EnvLookup, emitter activity.Emitter) *Manager {
 	if env == nil {
 		env = os.Getenv
 	}
-	return &Manager{prefs: prefs, secrets: secrets, env: env}
+	if emitter == nil {
+		emitter = activity.NopEmitter
+	}
+	return &Manager{prefs: prefs, secrets: secrets, env: env, activityEmitter: emitter}
 }
 
 func (s *Manager) GetPreferences(ctx context.Context) (Preferences, error) {
@@ -162,6 +171,18 @@ func (s *Manager) SavePreferences(ctx context.Context, input UpdateInput) (Prefe
 		return Preferences{}, err
 	}
 
+	if s.secrets.Available() {
+		if clientID := strings.TrimSpace(input.DigiKey.ClientID); clientID != "" {
+			if err := s.secrets.Set(secretDigiKeyClientID, clientID); err != nil {
+				return Preferences{}, err
+			}
+		} else {
+			if err := s.secrets.Delete(secretDigiKeyClientID); err != nil && !errors.Is(err, secretstore.ErrNotFound) {
+				return Preferences{}, err
+			}
+		}
+	}
+
 	if input.DigiKey.ReplaceClientSecret != nil {
 		if err := s.secrets.Set(secretDigiKeyClientSecret, strings.TrimSpace(*input.DigiKey.ReplaceClientSecret)); err != nil {
 			return Preferences{}, err
@@ -177,6 +198,16 @@ func (s *Manager) SavePreferences(ctx context.Context, input UpdateInput) (Prefe
 }
 
 func (s *Manager) ClearSecret(ctx context.Context, provider, secret string) (Preferences, error) {
+	if strings.ToLower(strings.TrimSpace(provider)) == "digikey" && secret == "client_secret" {
+		if err := s.secrets.Delete(secretDigiKeyClientSecret); err != nil {
+			return Preferences{}, err
+		}
+		if err := s.secrets.Delete(secretDigiKeyClientID); err != nil && !errors.Is(err, secretstore.ErrNotFound) {
+			return Preferences{}, err
+		}
+		return s.GetPreferences(ctx)
+	}
+
 	secretKey, err := secretKeyFor(provider, secret)
 	if err != nil {
 		return Preferences{}, err
@@ -188,11 +219,31 @@ func (s *Manager) ClearSecret(ctx context.Context, provider, secret string) (Pre
 }
 
 func (s *Manager) BuildSourcingService(ctx context.Context) (*sourcing.Service, error) {
+	coord, err := s.resolveSourcingCoordinator(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return coord.Service(), nil
+}
+
+func (s *Manager) GetSourcingCoordinator(ctx context.Context) (*sourcing.Coordinator, error) {
+	return s.resolveSourcingCoordinator(ctx)
+}
+
+func (s *Manager) resolveSourcingCoordinator(ctx context.Context) (*sourcing.Coordinator, error) {
 	resolved, err := s.Resolve(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return sourcing.NewFromConfig(resolved.Config), nil
+	fingerprint := sourcing.NormalizedConfigFingerprint(resolved.Config)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.coordinator != nil && s.coordinator.ConfigFingerprint() == fingerprint {
+		return s.coordinator, nil
+	}
+	s.coordinator = sourcing.NewCoordinatorWithEmitter(resolved.Config, s.activityEmitter)
+	return s.coordinator, nil
 }
 
 func (s *Manager) Resolve(ctx context.Context) (ResolvedConfig, error) {
@@ -218,7 +269,10 @@ func (s *Manager) Resolve(ctx context.Context) (ResolvedConfig, error) {
 		return ResolvedConfig{}, err
 	}
 
-	digiKeyClientID, digiKeyClientIDSource := pickValue(stored.DigiKeyClientID, strings.TrimSpace(s.env("DIGIKEY_CLIENT_ID")))
+	digiKeyClientID, digiKeyClientIDSource, _, err := s.resolvePreferenceValue(stored.DigiKeyClientID, secretDigiKeyClientID, "DIGIKEY_CLIENT_ID")
+	if err != nil {
+		return ResolvedConfig{}, err
+	}
 	digiKeyCustomerID, _ := pickValue(stored.DigiKeyCustomerID, strings.TrimSpace(s.env("DIGIKEY_CUSTOMER_ID")))
 	digiKeySite, _ := pickValue(stored.DigiKeySite, strings.TrimSpace(s.env("DIGIKEY_SITE")))
 	digiKeyLanguage, _ := pickValue(stored.DigiKeyLanguage, strings.TrimSpace(s.env("DIGIKEY_LANGUAGE")))
@@ -247,7 +301,7 @@ func (s *Manager) Resolve(ctx context.Context) (ResolvedConfig, error) {
 		Currency:           digiKeyCurrency,
 		ClientSecretStored: digiKeySecretStored,
 		Status: providerStatus(providerStatusInput{
-			Provider:        "DigiKey",
+			Provider:        sourcing.ProviderDigiKey,
 			Enabled:         stored.DigiKeyEnabled,
 			Missing:         digiKeyMissing,
 			SecretSource:    digiKeySecretSource,
@@ -261,7 +315,7 @@ func (s *Manager) Resolve(ctx context.Context) (ResolvedConfig, error) {
 		Enabled:      stored.MouserEnabled,
 		APIKeyStored: mouserSecretStored,
 		Status: providerStatus(providerStatusInput{
-			Provider:        "Mouser",
+			Provider:        sourcing.ProviderMouser,
 			Enabled:         stored.MouserEnabled,
 			Missing:         mouserMissing,
 			SecretSource:    mouserSecretSource,
@@ -275,7 +329,7 @@ func (s *Manager) Resolve(ctx context.Context) (ResolvedConfig, error) {
 		Enabled:  stored.LCSCEnabled,
 		Currency: lcscCurrency,
 		Status: ProviderStatus{
-			Provider:     "LCSC",
+			Provider:     sourcing.ProviderLCSC,
 			Enabled:      stored.LCSCEnabled,
 			Complete:     stored.LCSCEnabled,
 			State:        ternary(stored.LCSCEnabled, "configured", "disabled"),
@@ -378,11 +432,28 @@ func (s *Manager) resolveSecret(secretKey, envKey string) (string, string, bool,
 	return "", "unavailable", false, nil
 }
 
+func (s *Manager) resolvePreferenceValue(prefValue, secretKey, envKey string) (string, string, bool, error) {
+	value, source, stored, err := s.resolveSecret(secretKey, envKey)
+	if err != nil {
+		return "", "", false, err
+	}
+	if source == "preferences" {
+		return value, source, stored, nil
+	}
+	if trimmed := strings.TrimSpace(prefValue); trimmed != "" {
+		return trimmed, "preferences", false, nil
+	}
+	return value, source, stored, nil
+}
+
 func secretKeyFor(provider, secret string) (string, error) {
 	switch strings.ToLower(strings.TrimSpace(provider)) {
 	case "digikey":
 		if secret == "client_secret" {
 			return secretDigiKeyClientSecret, nil
+		}
+		if secret == "client_id" {
+			return secretDigiKeyClientID, nil
 		}
 	case "mouser":
 		if secret == "api_key" {
@@ -425,7 +496,7 @@ func providerStatus(input providerStatusInput) ProviderStatus {
 		status.State = "configured"
 		switch input.SecretSource {
 		case "preferences":
-			status.Message = fmt.Sprintf("Configured. %s secret is stored in the system credential store.", input.Provider)
+			status.Message = fmt.Sprintf("Configured. %s credentials are stored in the system credential store.", input.Provider)
 		case "environment":
 			status.Message = fmt.Sprintf("Configured using environment variables for %s credentials.", input.Provider)
 		default:

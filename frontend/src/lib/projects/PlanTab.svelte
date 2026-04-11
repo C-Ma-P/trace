@@ -4,6 +4,7 @@
     sourceRequirement,
     sourceRequirementFromProvider,
     getSourcingProviders,
+    probeSupplierOffer,
     clearSelectedComponentForRequirement,
     addPartCandidate,
     setPreferredCandidate,
@@ -23,6 +24,7 @@
     type SourcingProviderInfo,
   } from '../backend';
   import { Browser } from '@wailsio/runtime';
+  import { fade } from 'svelte/transition';
 
   let { project, categories = [], onupdated }: {
     project: Project;
@@ -38,6 +40,10 @@
   let supplierLoadingByRequirementId = $state<Record<string, boolean>>({});
   let supplierErrorByRequirementId = $state<Record<string, string>>({});
   let actionInProgress = $state<Record<string, boolean>>({});
+  let offerExpandedByRequirementId = $state<Record<string, Record<string, boolean>>>({});
+  let offerProbeResultByKey = $state<Record<string, SupplierOfferType>>({});
+  let offerProbeLoadingByKey = $state<Record<string, boolean>>({});
+  let offerProbeErrorByKey = $state<Record<string, string>>({});
 
   // Progress animation state: tracks the animated step index per requirement
   let supplierProgressStep = $state<Record<string, number>>({});
@@ -68,6 +74,70 @@
 
   function toggleExpand(reqId: string) {
     expandedReq = expandedReq === reqId ? null : reqId;
+  }
+
+  function offerKey(offer: SupplierOfferType): string {
+    return `${offer.provider}|${offer.supplierPartNumber}|${offer.mpn}`;
+  }
+
+  function isOfferExpanded(requirementId: string, offer: SupplierOfferType): boolean {
+    return !!offerExpandedByRequirementId[requirementId]?.[offerKey(offer)];
+  }
+
+  function toggleOfferExpand(requirementId: string, offer: SupplierOfferType) {
+    const key = offerKey(offer);
+    const expanded = isOfferExpanded(requirementId, offer);
+    offerExpandedByRequirementId = {
+      ...offerExpandedByRequirementId,
+      [requirementId]: {
+        ...offerExpandedByRequirementId[requirementId],
+        [key]: !expanded,
+      },
+    };
+    if (!expanded && !offerProbeResultByKey[key] && !offerProbeLoadingByKey[key]) {
+      void loadOfferProbe(key, offer);
+    }
+  }
+
+  function toggleOfferExpandRow(event: MouseEvent, requirementId: string, offer: SupplierOfferType) {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('button, a, input, select, textarea')) {
+      return;
+    }
+    toggleOfferExpand(requirementId, offer);
+  }
+
+  async function loadOfferProbe(key: string, offer: SupplierOfferType) {
+    offerProbeLoadingByKey = { ...offerProbeLoadingByKey, [key]: true };
+    offerProbeErrorByKey = { ...offerProbeErrorByKey, [key]: '' };
+    try {
+      const probed = await probeSupplierOffer(offer);
+      offerProbeResultByKey = { ...offerProbeResultByKey, [key]: probed };
+    } catch (e: any) {
+      offerProbeErrorByKey = { ...offerProbeErrorByKey, [key]: e?.message ?? String(e) };
+    } finally {
+      offerProbeLoadingByKey = { ...offerProbeLoadingByKey, [key]: false };
+    }
+  }
+
+  function getOfferProbeState(offer: SupplierOfferType): string {
+    const key = offerKey(offer);
+    return offer.assetProbeState || offerProbeResultByKey[key]?.assetProbeState || 'unknown';
+  }
+
+  function getOfferProbeError(offer: SupplierOfferType): string {
+    const key = offerKey(offer);
+    return offer.assetProbeError || offerProbeResultByKey[key]?.assetProbeError || offerProbeErrorByKey[key] || '';
+  }
+
+  function isOfferProbeLoading(offer: SupplierOfferType): boolean {
+    const key = offerKey(offer);
+    return !!offerProbeLoadingByKey[key];
+  }
+
+  function getProbedOffer(offer: SupplierOfferType): SupplierOfferType {
+    const key = offerKey(offer);
+    return offerProbeResultByKey[key] ?? offer;
   }
 
   async function loadSupplierOptions(requirementId: string, force = false) {
@@ -264,20 +334,24 @@
     actionInProgress = { ...actionInProgress, [key]: true };
     error = '';
     try {
+      const persistedOffer = getProbedOffer(offer);
       await addProviderCandidate({
         requirementId,
-        provider: offer.provider,
-        providerPartId: offer.supplierPartNumber,
-        productUrl: offer.productUrl,
-        imageUrl: offer.imageUrl,
-        manufacturer: offer.manufacturer,
-        mpn: offer.mpn,
-        description: offer.description,
-        package: offer.package,
-        stock: offer.stock,
-        moq: offer.moq,
-        unitPrice: offer.unitPrice,
+        provider: persistedOffer.provider,
+        providerPartId: persistedOffer.supplierPartNumber,
+        productUrl: persistedOffer.productUrl,
+        imageUrl: persistedOffer.imageUrl,
+        datasheetUrl: persistedOffer.datasheetUrl,
+        manufacturer: persistedOffer.manufacturer,
+        mpn: persistedOffer.mpn,
+        description: persistedOffer.description,
+        package: persistedOffer.package,
+        stock: persistedOffer.stock,
+        moq: persistedOffer.moq,
+        unitPrice: persistedOffer.unitPrice,
         currency,
+        assetProbeState: persistedOffer.assetProbeState,
+        assetProbeError: persistedOffer.assetProbeError,
         setPreferred,
       });
       await runPlan();
@@ -357,6 +431,13 @@
     if (origin === 'provider') return 'Provider';
     if (origin === 'imported_from_supplier') return 'Imported';
     return 'Local';
+  }
+
+  function providerOrOriginLabel(c: PartCandidate): string {
+    if (c.origin === 'provider' && c.sourceOffer?.provider) {
+      return c.sourceOffer.provider;
+    }
+    return originLabel(c.origin);
   }
 
   function candidateDisplayMpn(c: PartCandidate): string {
@@ -444,7 +525,7 @@
             {#if preferred}
               <div class="selected-banner">
                 <div class="selected-banner-copy">
-                  <span class="selected-banner-label">Preferred part <span class="origin-badge origin-provider">Provider</span></span>
+                  <span class="selected-banner-label">Preferred part <span class="origin-badge origin-provider">{preferred.sourceOffer?.provider ?? 'Provider'}</span></span>
                   <strong>{candidateDisplayMpn(preferred)} — {candidateDisplayManufacturer(preferred)}</strong>
                   <span class="selected-banner-meta">Not yet imported into catalog</span>
                 </div>
@@ -483,7 +564,7 @@
                           <td class="mpn-cell">{candidateDisplayMpn(candidate)}</td>
                           <td>{candidateDisplayManufacturer(candidate)}</td>
                           <td>{candidateDisplayPackage(candidate)}</td>
-                          <td><span class="origin-badge origin-{candidate.origin}">{originLabel(candidate.origin)}</span></td>
+                          <td><span class="origin-badge origin-{candidate.origin}">{providerOrOriginLabel(candidate)}</span></td>
                           <td>
                             {#if candidate.preferred}
                               <span class="badge badge-success">Preferred</span>
@@ -646,6 +727,7 @@
                           <th>Manufacturer</th>
                           <th>Supplier SKU</th>
                           <th>Package</th>
+                          <th>Assets</th>
                           <th>Stock</th>
                           <th>MOQ</th>
                           <th>Unit Price ({sourcingResult.currency || 'USD'})</th>
@@ -654,16 +736,40 @@
                         </tr>
                       </thead>
                       <tbody>
-                        {#each sourcingResult.offers as offer}
+                        {#each sourcingResult.offers as offer (offerKey(offer))}
                           {@const quality = supplierQualityBadge(offer)}
                           {@const alreadyCandidate = isAlreadyCandidate(rp, offer)}
-                          <tr>
+                          {@const expanded = isOfferExpanded(rp.requirement.id, offer)}
+                          {@const probeState = getOfferProbeState(offer)}
+                          <tr class="supplier-row" class:expanded-row={expanded} role="button" onclick={(event) => toggleOfferExpandRow(event, rp.requirement.id, offer)}>
                             <td class="img-cell">{#if offer.imageUrl}<img src={offer.imageUrl} alt="" class="offer-thumb" />{/if}</td>
                             <td><span class="provider-badge">{offer.provider}</span></td>
                             <td class="mpn-cell">{offer.mpn || '—'}</td>
                             <td>{offer.manufacturer || '—'}</td>
                             <td>{offer.supplierPartNumber || '—'}</td>
                             <td>{offer.package || '—'}</td>
+                            <td>
+                              <div class="asset-badges">
+                                {#if offer.hasSymbol}<span class="asset-badge">Symbol</span>{/if}
+                                {#if offer.hasFootprint}<span class="asset-badge">Footprint</span>{/if}
+                                {#if offer.hasDatasheet}<span class="asset-badge">Datasheet</span>{/if}
+                                {#if !offer.hasSymbol && !offer.hasFootprint && !offer.hasDatasheet}
+                                  {#if expanded}
+                                    {#if isOfferProbeLoading(offer)}
+                                      <span class="asset-badge asset-badge--unknown">Probing asset details…</span>
+                                    {:else if getOfferProbeError(offer)}
+                                      <span class="asset-badge asset-badge--unknown">Probe failed</span>
+                                    {:else if probeState === 'unknown'}
+                                      <span class="asset-badge asset-badge--unknown">No asset details available</span>
+                                    {:else}
+                                      <span class="asset-badge asset-badge--unknown">Asset details: {probeState}</span>
+                                    {/if}
+                                  {:else}
+                                    <span class="asset-badge asset-badge--unknown">Tap row for asset details</span>
+                                  {/if}
+                                {/if}
+                              </div>
+                            </td>
                             <td class="qty-cell">{formatSupplierCount(offer.stock)}</td>
                             <td class="qty-cell">{formatSupplierCount(offer.moq)}</td>
                             <td>{formatSupplierPrice(offer)}</td>
@@ -681,21 +787,60 @@
                               {#if alreadyCandidate}
                                 <span class="badge">Candidate</span>
                               {:else}
-                                <button
-                                  class="btn btn-primary btn-sm"
-                                  onclick={() => handleAddProviderCandidate(rp.requirement.id, offer, sourcingResult.currency, true)}
-                                >
-                                  Add + Set Preferred
-                                </button>
-                                <button
-                                  class="btn btn-secondary btn-sm"
-                                  onclick={() => handleAddProviderCandidate(rp.requirement.id, offer, sourcingResult.currency, false)}
-                                >
-                                  Add as Candidate
-                                </button>
+                                <div class="btn-group">
+                                  <button
+                                    class="btn btn-primary btn-sm"
+                                    onclick={() => handleAddProviderCandidate(rp.requirement.id, offer, sourcingResult.currency, true)}
+                                  >
+                                    Add + Set Preferred
+                                  </button>
+                                  <button
+                                    class="btn btn-secondary btn-sm"
+                                    onclick={() => handleAddProviderCandidate(rp.requirement.id, offer, sourcingResult.currency, false)}
+                                  >
+                                    Add as Candidate
+                                  </button>
+                                </div>
                               {/if}
                             </td>
                           </tr>
+                          {#if expanded}
+                            <tr class="supplier-details-row">
+                              <td colspan="12">
+                                <div class="supplier-details-panel" in:fade={{ duration: 120 }}>
+                                  {#if isOfferProbeLoading(offer)}
+                                    <div class="supplier-details-loading">Loading asset details…</div>
+                                  {:else if getOfferProbeError(offer)}
+                                    <div class="error-text">Asset probe failed: {getOfferProbeError(offer)}</div>
+                                  {:else}
+                                    {@const result = getProbedOffer(offer)}
+                                    <div class="supplier-details-grid">
+                                      <div class="supplier-details-item">
+                                        <span class="meta-label">Asset Probe</span>
+                                        <span class="meta-value">{getOfferProbeState(offer)}</span>
+                                      </div>
+                                      <div class="supplier-details-item">
+                                        <span class="meta-label">Symbol</span>
+                                        <span class="meta-value">{result.hasSymbol ? 'Yes' : 'No'}</span>
+                                      </div>
+                                      <div class="supplier-details-item">
+                                        <span class="meta-label">Footprint</span>
+                                        <span class="meta-value">{result.hasFootprint ? 'Yes' : 'No'}</span>
+                                      </div>
+                                      <div class="supplier-details-item">
+                                        <span class="meta-label">Datasheet</span>
+                                        <span class="meta-value">{result.hasDatasheet ? 'Yes' : 'No'}</span>
+                                      </div>
+                                      <div class="supplier-details-item supplier-details-url">
+                                        <span class="meta-label">Datasheet URL</span>
+                                        <span class="meta-value">{result.datasheetUrl || '—'}</span>
+                                      </div>
+                                    </div>
+                                  {/if}
+                                </div>
+                              </td>
+                            </tr>
+                          {/if}
                         {/each}
                       </tbody>
                     </table>
@@ -739,6 +884,55 @@
     color: var(--color-text-secondary);
     font-style: italic;
     animation: sourcing-pulse 1.4s ease-in-out infinite;
+  }
+  .supplier-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .supplier-row {
+    cursor: pointer;
+  }
+  .supplier-row td {
+    user-select: none;
+  }
+  .supplier-details-row td {
+    padding: 0;
+    border-top: none;
+  }
+  .supplier-details-panel {
+    padding: 12px 16px;
+    background: var(--color-surface-secondary);
+    border-radius: 0 0 8px 8px;
+    display: grid;
+    gap: 10px;
+    will-change: opacity, transform;
+  }
+  .supplier-details-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    align-items: center;
+  }
+  .supplier-details-item {
+    display: grid;
+    gap: 4px;
+    color: var(--color-text-secondary);
+    font-size: 13px;
+  }
+  .supplier-details-item .meta-label {
+    font-weight: 600;
+    color: var(--color-text);
+  }
+  .supplier-details-url {
+    grid-column: span 2;
+  }
+  .supplier-details-loading {
+    color: var(--color-text-secondary);
+    font-size: 13px;
+  }
+  .asset-badge--unknown {
+    background: var(--color-surface);
+    color: var(--color-text-secondary);
   }
   .sourcing-provider-rows {
     display: flex;
@@ -965,6 +1159,19 @@
     letter-spacing: 0.04em;
     text-transform: uppercase;
   }
+  .asset-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .asset-badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    color: var(--color-text-secondary);
+    background: var(--color-bg-muted);
+    font-weight: 600;
+  }
   .offer-thumb {
     width: 28px;
     height: 28px;
@@ -1000,6 +1207,9 @@
     color: var(--color-text-secondary);
     font-size: 11px;
     border-bottom: 1px solid var(--color-border);
+  }
+  .match-table th:last-child {
+    width: 220px;
   }
   .match-table td {
     padding: 6px 10px;
@@ -1050,8 +1260,28 @@
   .action-cell {
     display: flex;
     gap: 6px;
-    align-items: center;
+    align-items: flex-start;
+    justify-content: flex-end;
     flex-wrap: wrap;
+    min-width: 180px;
+    text-align: right;
+  }
+  .btn-group {
+    display: inline-flex;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    box-shadow: inset 0 0 0 1px var(--color-border);
+  }
+  .btn-group .btn {
+    border-radius: 0;
+    border: none;
+    margin: 0;
+  }
+  .btn-group .btn + .btn {
+    border-left: 1px solid var(--color-border);
+  }
+  .btn-group .btn:first-child {
+    border-right: 1px solid var(--color-border);
   }
   .origin-badge {
     display: inline-flex;

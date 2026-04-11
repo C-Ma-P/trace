@@ -2,10 +2,12 @@ package sourcing
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
 
+	easyeda "github.com/C-Ma-P/go-easyeda"
 	digikey "github.com/PatrickWalther/go-digikey"
 	lcsc "github.com/PatrickWalther/go-lcsc"
 	mouser "github.com/PatrickWalther/go-mouser"
@@ -91,6 +93,7 @@ func TestNormalizeProviderOffers(t *testing.T) {
 		DetailedDescription:       "IC INVERTER SCHMITT SOT23-5",
 		ProductURL:                "https://www.digikey.com/en/products/detail/test",
 		DatasheetURL:              "https://example.com/datasheet.pdf",
+		PhotoURL:                  "https://example.com/photo.jpg",
 		QuantityAvailable:         1234,
 		UnitPrice:                 0.12,
 		StandardPackage:           1,
@@ -100,8 +103,11 @@ func TestNormalizeProviderOffers(t *testing.T) {
 			MinimumOrderQuantity: 1,
 		}},
 	})
-	if digi.Provider != "DigiKey" || digi.SupplierPartNumber != "296-8480-1-ND" {
+	if digi.Provider != ProviderDigiKey || digi.SupplierPartNumber != "296-8480-1-ND" {
 		t.Fatalf("unexpected DigiKey normalization: %#v", digi)
+	}
+	if digi.ImageURL != "https://example.com/photo.jpg" {
+		t.Fatalf("expected Digikey ImageURL to be populated, got %q", digi.ImageURL)
 	}
 
 	mouserOffer := normalizeMouserPart(mouser.Part{
@@ -132,7 +138,7 @@ func TestNormalizeProviderOffers(t *testing.T) {
 		EncapStandard:    "0402",
 		ProductPriceList: []lcsc.PriceBreak{{Ladder: 1, ProductPrice: lcsc.FlexFloat64(0.01), CurrencySymbol: "USD"}},
 	})
-	if lcscOffer.Provider != "LCSC" || lcscOffer.MOQ == nil || *lcscOffer.MOQ != 5 {
+	if lcscOffer.Provider != ProviderLCSC || lcscOffer.MOQ == nil || *lcscOffer.MOQ != 5 {
 		t.Fatalf("unexpected LCSC normalization: %#v", lcscOffer)
 	}
 }
@@ -148,14 +154,14 @@ func TestRankOffers_PrefersExactMatches(t *testing.T) {
 	}
 	offers := RankOffers(query, []SupplierOffer{
 		{
-			Provider:     "Mouser",
+			Provider:     ProviderMouser,
 			Manufacturer: "Murata",
 			MPN:          "GRM155R71C104KA88D",
 			Description:  "100nF 16V X7R capacitor",
 			Package:      "0402",
 		},
 		{
-			Provider:     "LCSC",
+			Provider:     ProviderLCSC,
 			Manufacturer: "Another",
 			MPN:          "XYZ123",
 			Description:  "100nF capacitor",
@@ -163,7 +169,7 @@ func TestRankOffers_PrefersExactMatches(t *testing.T) {
 		},
 	})
 
-	if offers[0].Provider != "Mouser" {
+	if offers[0].Provider != ProviderMouser {
 		t.Fatalf("expected exact offer first, got %#v", offers)
 	}
 	if offers[0].MatchScore <= offers[1].MatchScore {
@@ -176,9 +182,9 @@ func TestRankOffers_PrefersExactMatches(t *testing.T) {
 
 func TestService_Source_ProviderFailureSoftens(t *testing.T) {
 	svc := NewService(
-		stubProvider{name: "DigiKey", enabled: true, err: errors.New("timeout")},
-		stubProvider{name: "Mouser", enabled: true, offers: []SupplierOffer{{Provider: "Mouser", MPN: "ABC123"}}},
-		stubProvider{name: "LCSC", enabled: false},
+		stubProvider{name: ProviderDigiKey, enabled: true, err: errors.New("timeout")},
+		stubProvider{name: ProviderMouser, enabled: true, offers: []SupplierOffer{{Provider: ProviderMouser, MPN: "ABC123"}}},
+		stubProvider{name: ProviderLCSC, enabled: false},
 	)
 
 	result := svc.Source(context.Background(), RequirementQuery{Category: domain.CategoryIntegratedCircuit})
@@ -207,4 +213,37 @@ func containsString(values []string, target string) bool {
 		}
 	}
 	return false
+}
+
+func TestLCSCProvider_EnrichOfferAssets(t *testing.T) {
+	provider := &LCSCProvider{
+		bundleFetcher: func(_ context.Context, lcscID string, _ easyeda.FetchOptions) (*easyeda.ComponentBundle, error) {
+			if lcscID != "C12345" {
+				t.Fatalf("unexpected LCSC ID: %s", lcscID)
+			}
+			return &easyeda.ComponentBundle{
+				Extracted: &easyeda.ComponentMetadata{
+					SymbolRaw:    json.RawMessage(`{"pins":[]}`),
+					FootprintRaw: json.RawMessage(`{"pads":[]}`),
+					DatasheetURL: "https://example.com/datasheet.pdf",
+				},
+			}, nil
+		},
+	}
+
+	offer := SupplierOffer{SupplierPartNumber: "C12345"}
+	provider.enrichOfferAssets(context.Background(), &offer)
+
+	if !offer.HasSymbol {
+		t.Fatalf("expected HasSymbol=true")
+	}
+	if !offer.HasFootprint {
+		t.Fatalf("expected HasFootprint=true")
+	}
+	if !offer.HasDatasheet {
+		t.Fatalf("expected HasDatasheet=true")
+	}
+	if offer.DatasheetURL != "https://example.com/datasheet.pdf" {
+		t.Fatalf("expected datasheet url to be preserved, got %q", offer.DatasheetURL)
+	}
 }

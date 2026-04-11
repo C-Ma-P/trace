@@ -420,12 +420,19 @@ function buildCardContent(entry) {
       + '</svg></div>';
   }
 
+  var assetBadges = '';
+  if (r) {
+    if (r.hasSymbol) assetBadges += '<span class="badge badge-vendor">Symbol</span>';
+    if (r.hasFootprint) assetBadges += '<span class="badge badge-vendor">Footprint</span>';
+    if (r.hasDatasheet) assetBadges += '<span class="badge badge-vendor">Datasheet</span>';
+  }
   return '<div class="detection-badges">' + vendorBadge + '</div>'
     + '<div class="comp-row">'
     + thumbHtml
     + '<div class="comp-info">'
     + '<div class="comp-name">' + esc(name || 'Unknown Component') + '</div>'
     + (sub ? '<div class="comp-sub">' + esc(sub) + '</div>' : '')
+    + (assetBadges ? '<div class="detection-badges">' + assetBadges + '</div>' : '')
     + '</div></div>';
 }
 
@@ -550,6 +557,22 @@ function renderModalBody(scan) {
       + '<div class="modal-field-label">Product Page</div>'
       + '<div class="modal-field-value"><a href="' + esc(r.productUrl) + '" target="_blank" rel="noopener" style="color:#7cb3ff">' + esc(r.productUrl) + '</a></div>'
       + '</div>';
+  }
+  if (r.hasSymbol || r.hasFootprint || r.hasDatasheet) {
+    html += '<div class="modal-field">'
+      + '<div class="modal-field-label">Assets</div>'
+      + '<div class="modal-field-value">'
+      + (r.hasSymbol ? '<span class="badge badge-vendor">Symbol</span> ' : '')
+      + (r.hasFootprint ? '<span class="badge badge-vendor">Footprint</span> ' : '')
+      + (r.hasDatasheet ? '<span class="badge badge-vendor">Datasheet</span>' : '')
+      + '</div>'
+      + '</div>';
+  }
+  if (r.assetProbeState && r.assetProbeState !== 'probed') {
+    html += mfield('Probe State', r.assetProbeState);
+  }
+  if (r.assetProbeError) {
+    html += '<div class="modal-field error-text">Probe error: ' + esc(r.assetProbeError) + '</div>';
   }
 
   $('modal-title').textContent = r.manufacturer ? r.manufacturer + ' ' + r.mpn : r.mpn;

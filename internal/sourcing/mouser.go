@@ -28,7 +28,7 @@ func NewMouserProvider(config MouserConfig) *MouserProvider {
 }
 
 func (p *MouserProvider) Name() string {
-	return "Mouser"
+	return ProviderMouser
 }
 
 func (p *MouserProvider) Enabled() bool {
@@ -146,7 +146,7 @@ func normalizeMouserPart(part mouser.Part) SupplierOffer {
 	}
 
 	return SupplierOffer{
-		Provider:           "Mouser",
+		Provider:           ProviderMouser,
 		Manufacturer:       strings.TrimSpace(firstNonEmpty(part.ActualMfrName, part.Manufacturer)),
 		MPN:                strings.TrimSpace(part.ManufacturerPartNumber),
 		SupplierPartNumber: strings.TrimSpace(part.MouserPartNumber),
@@ -159,6 +159,9 @@ func normalizeMouserPart(part mouser.Part) SupplierOffer {
 		DatasheetURL:       strings.TrimSpace(part.DataSheetUrl),
 		ImageURL:           strings.TrimSpace(part.ImagePath),
 		Lifecycle:          strings.TrimSpace(part.LifecycleStatus),
+		HasSymbol:          false,
+		HasFootprint:       false,
+		HasDatasheet:       strings.TrimSpace(part.DataSheetUrl) != "",
 		Raw:                raw,
 	}
 }

@@ -42,9 +42,13 @@
   let activeScanToken = 0;
 
   let preview: KiCadImportPreview | null = $state(null);
+  let previewCache: Record<string, KiCadImportPreview> = $state({});
+  let previewErrorCache: Record<string, any> = $state({});
   let previewBusy = $state(false);
   let previewError = $state('');
+  let previewErrorData: any = $state(null);
   let selectedRowIndex: number | null = $state(null);
+  let previewLoadToken = 0;
 
   let targetMode: 'new' | 'existing' = $state('new');
   let newProjectName = $state('');
@@ -134,9 +138,123 @@
 
   function resetPreview() {
     preview = null;
+    previewBusy = false;
     previewError = '';
     importError = '';
     selectedRowIndex = null;
+  }
+
+  function parsePreviewError(err: any): any {
+    const message = err?.message ?? String(err);
+    if (typeof message !== 'string') {
+      return message;
+    }
+
+    try {
+      return JSON.parse(message);
+    } catch {
+      return message;
+    }
+  }
+
+  function previewErrorDataToText(value: any, indent = 0): string {
+    const spacer = '  '.repeat(indent);
+    if (value === null) {
+      return `${spacer}null`;
+    }
+    if (Array.isArray(value)) {
+      return value
+        .map((item, index) => `${spacer}[${index}]: ${typeof item === 'object' ? '\n' + previewErrorDataToText(item, indent + 1) : String(item)}`)
+        .join('\n');
+    }
+    if (typeof value === 'object') {
+      return Object.entries(value)
+        .map(([key, nested]) => `${spacer}${key}: ${typeof nested === 'object' ? '\n' + previewErrorDataToText(nested, indent + 1) : String(nested)}`)
+        .join('\n');
+    }
+    return `${spacer}${String(value)}`;
+  }
+
+  function setPreviewForSelected() {
+    if (!selectedProjectPath) {
+      preview = null;
+      previewError = '';
+      selectedRowIndex = null;
+      return;
+    }
+
+    const cached = previewCache[selectedProjectPath];
+    if (cached) {
+      preview = cached;
+      previewErrorData = previewErrorCache[selectedProjectPath] ?? null;
+      previewError = previewErrorData ? 'Preview load failed' : '';
+      selectedRowIndex = cached.rows.length > 0 ? 0 : null;
+      return;
+    }
+
+    preview = null;
+    previewErrorData = previewErrorCache[selectedProjectPath] ?? null;
+    previewError = previewErrorData ? 'Preview load failed' : '';
+    selectedRowIndex = null;
+  }
+
+  async function refreshPreview(projectPath: string) {
+    const loadToken = ++previewLoadToken;
+    previewBusy = true;
+    previewError = '';
+    importError = '';
+
+    try {
+      const loaded = await previewKiCadImport(projectPath);
+      if (loadToken !== previewLoadToken) {
+        return;
+      }
+      previewCache[projectPath] = loaded;
+      delete previewErrorCache[projectPath];
+      if (selectedProjectPath === projectPath) {
+        preview = loaded;
+        previewError = '';
+        selectedRowIndex = loaded.rows.length > 0 ? 0 : null;
+      }
+    } catch (err: any) {
+      const parsed = parsePreviewError(err);
+      previewErrorCache[projectPath] = parsed;
+      if (selectedProjectPath === projectPath) {
+        previewErrorData = parsed;
+        previewError = 'Preview load failed';
+        preview = null;
+        selectedRowIndex = null;
+      }
+    } finally {
+      if (loadToken === previewLoadToken) {
+        previewBusy = false;
+      }
+    }
+  }
+
+  async function prefetchPreview(projectPath: string) {
+    if (!projectPath || previewCache[projectPath] || previewErrorCache[projectPath]) {
+      return;
+    }
+
+    try {
+      const loaded = await previewKiCadImport(projectPath);
+      previewCache[projectPath] = loaded;
+      if (projectPath === selectedProjectPath && !preview) {
+        preview = loaded;
+        previewError = '';
+        selectedRowIndex = loaded.rows.length > 0 ? 0 : null;
+      }
+    } catch (err: any) {
+      const parsed = parsePreviewError(err);
+      previewErrorCache[projectPath] = parsed;
+      if (projectPath === selectedProjectPath) {
+        previewErrorData = parsed;
+        previewError = 'Preview load failed';
+        preview = null;
+        selectedRowIndex = null;
+      }
+    }
   }
 
   function selectedCandidate(): KiCadProjectCandidate | null {
@@ -181,6 +299,10 @@
         selectedProjectPath = nextCandidates[0]?.projectPath ?? '';
         resetPreview();
       }
+      setPreviewForSelected();
+      nextCandidates.forEach((candidate) => {
+        void prefetchPreview(candidate.projectPath);
+      });
     } catch (err: any) {
       if (scanToken !== activeScanToken) {
         return;
@@ -231,27 +353,18 @@
   }
 
   function selectCandidate(candidate: KiCadProjectCandidate) {
+    if (candidate.projectPath === selectedProjectPath) {
+      return;
+    }
     selectedProjectPath = candidate.projectPath;
-    resetPreview();
+    setPreviewForSelected();
   }
 
   async function handlePreview() {
     if (!selectedProjectPath) {
       return;
     }
-    previewBusy = true;
-    previewError = '';
-    importError = '';
-    try {
-      preview = await previewKiCadImport(selectedProjectPath);
-      selectedRowIndex = preview.rows.length > 0 ? 0 : null;
-    } catch (err: any) {
-      previewError = err?.message ?? String(err);
-      preview = null;
-      selectedRowIndex = null;
-    } finally {
-      previewBusy = false;
-    }
+    await refreshPreview(selectedProjectPath);
   }
 
   function toggleIncluded(index: number, included: boolean) {
@@ -355,7 +468,7 @@
           <div class="projects-toolbar">
             <div class="section-copy">
               <div class="section-title">Discovered Projects</div>
-              <p>Filter the current scan results and pick one project to preview.</p>
+              <p>Filter the current scan results and pick one project to preview. The selected project's preview loads automatically.</p>
             </div>
 
             <div class="filter-box">
@@ -386,9 +499,16 @@
                 <button
                   class="candidate-item"
                   class:selected={candidate.projectPath === selectedProjectPath}
+                  class:warning={!!previewErrorCache[candidate.projectPath]}
+                  class:loading={candidate.projectPath === selectedProjectPath && previewBusy}
                   onclick={() => selectCandidate(candidate)}
                 >
-                  <div class="candidate-name">{candidate.name}</div>
+                  <div class="candidate-name">
+                    {candidate.name}
+                    {#if previewErrorCache[candidate.projectPath]}
+                      <span class="badge badge-warning candidate-warning" aria-label="Preview failed">Warning</span>
+                    {/if}
+                  </div>
                   <div class="candidate-path">{candidate.projectPath}</div>
                 </button>
               {/each}
@@ -409,12 +529,15 @@
           {/if}
         </div>
         <button class="btn btn-primary btn-sm" onclick={() => void handlePreview()} disabled={!selectedProjectPath || previewBusy}>
-          {previewBusy ? 'Previewing…' : 'Preview Import'}
+          {previewBusy ? 'Refreshing…' : 'Refresh Preview'}
         </button>
       </div>
 
       {#if previewError}
-        <div class="error-text section-error">{previewError}</div>
+        <div class="notice-card notice-card-error error-block">
+          <div class="error-block-title">Preview load failed</div>
+          <pre>{previewErrorData ? previewErrorDataToText(previewErrorData) : previewError}</pre>
+        </div>
       {/if}
 
       {#if !preview}
@@ -755,6 +878,8 @@
     gap: 8px;
     min-height: 0;
     padding-top: 1px;
+    padding-right: 16px;
+    scrollbar-gutter: stable both-edges;
   }
 
   .candidate-item,
@@ -831,6 +956,53 @@
     color: var(--color-text-secondary);
     line-height: 1.4;
     word-break: break-word;
+  }
+
+  .candidate-item.warning {
+    border-color: var(--color-danger-border);
+    background: rgba(251, 191, 36, 0.06);
+  }
+
+  .candidate-warning {
+    margin-left: 8px;
+    font-size: 0.75em;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .candidate-item.loading {
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.2), 0 0 0 4px rgba(59, 130, 246, 0.1);
+    animation: glow-border 1.4s ease-in-out infinite;
+  }
+
+  @keyframes glow-border {
+    0%, 100% { box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.2), 0 0 0 4px rgba(59, 130, 246, 0.04); }
+    50% { box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.35), 0 0 0 8px rgba(59, 130, 246, 0.12); }
+  }
+
+  .error-block {
+    padding: 16px;
+    border-left: none;
+    border-right: none;
+    border-top: 1px solid var(--color-danger-border);
+    border-bottom: 1px solid var(--color-danger-border);
+    border-radius: 0;
+    background: var(--color-danger-soft);
+    color: var(--color-danger-text);
+    margin-bottom: 16px;
+  }
+
+  .error-block-title {
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+
+  .error-block pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
   }
 
   .summary-strip {

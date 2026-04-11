@@ -227,9 +227,10 @@
 
   .intake-panel {
     padding: 2px 10px 8px;
-    min-width: 180px;
+    min-width: 184px;
     transform: translateX(-100%);
     transition: transform 0.18s ease;
+    box-sizing: border-box;
   }
   .intake-collapse-clip.open .intake-panel {
     transform: translateX(0);
@@ -274,11 +275,14 @@
   .qr-wrap {
     display: flex;
     justify-content: center;
+    width: 100%;
     margin-bottom: 6px;
   }
+  .qr-wrap img,
   .qr-wrap canvas {
     border-radius: var(--radius-md);
     display: block;
+    margin: 0 auto;
   }
   .intake-hint {
     font-size: 10px;

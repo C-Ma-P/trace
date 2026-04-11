@@ -11,6 +11,14 @@ import (
 	"trace/internal/domain/registry"
 )
 
+type AssetProbeState string
+
+const (
+	AssetProbeStateUnknown AssetProbeState = "unknown"
+	AssetProbeStateProbed  AssetProbeState = "probed"
+	AssetProbeStateError   AssetProbeState = "error"
+)
+
 type SupplierOffer struct {
 	Provider           string            `json:"provider"`
 	Manufacturer       string            `json:"manufacturer"`
@@ -25,6 +33,11 @@ type SupplierOffer struct {
 	DatasheetURL       string            `json:"datasheetUrl"`
 	ImageURL           string            `json:"imageUrl"`
 	Lifecycle          string            `json:"lifecycle"`
+	HasSymbol          bool              `json:"hasSymbol"`
+	HasFootprint       bool              `json:"hasFootprint"`
+	HasDatasheet       bool              `json:"hasDatasheet"`
+	AssetProbeState    AssetProbeState   `json:"assetProbeState"`
+	AssetProbeError    string            `json:"assetProbeError,omitempty"`
 	MatchScore         int               `json:"matchScore"`
 	MatchReasons       []string          `json:"matchReasons"`
 	Raw                map[string]string `json:"raw,omitempty"`

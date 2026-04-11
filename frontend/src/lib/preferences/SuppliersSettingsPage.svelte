@@ -305,7 +305,7 @@
 						disabled={!secureStorageAvailable || !prefs?.digikey.clientSecretStored || clearingSecret === 'digikey:client_secret'}
 						onclick={() => void handleClearSecret('digikey', 'client_secret')}
 					>
-						{clearingSecret === 'digikey:client_secret' ? 'Clearing…' : 'Clear Stored Secret'}
+						{clearingSecret === 'digikey:client_secret' ? 'Clearing…' : 'Clear Stored Credentials'}
 					</button>
 				</div>
 			</SupplierProviderBlock>

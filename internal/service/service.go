@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"sync"
 
 	"fmt"
 
@@ -16,13 +17,15 @@ import (
 )
 
 type Service struct {
-	components     domain.ComponentRepository
-	projects       domain.ProjectRepository
-	assets         domain.ComponentAssetRepository
-	kicad          *kicad.Service
-	kicadConfig    *kicadconfig.Manager
-	sourcing       *sourcing.Service
-	supplierConfig *supplierconfig.Manager
+	components            domain.ComponentRepository
+	projects              domain.ProjectRepository
+	assets                domain.ComponentAssetRepository
+	kicad                 *kicad.Service
+	kicadConfig           *kicadconfig.Manager
+	sourcing              *sourcing.Service
+	sourcingCoordinator   *sourcing.Coordinator
+	sourcingCoordinatorMu sync.Mutex
+	supplierConfig        *supplierconfig.Manager
 }
 
 func New(components domain.ComponentRepository, projects domain.ProjectRepository, assets domain.ComponentAssetRepository, kicadServices ...*kicad.Service) *Service {
@@ -34,7 +37,10 @@ func New(components domain.ComponentRepository, projects domain.ProjectRepositor
 }
 
 func (s *Service) SetSourcing(sourcingSvc *sourcing.Service) *Service {
+	s.sourcingCoordinatorMu.Lock()
 	s.sourcing = sourcingSvc
+	s.sourcingCoordinator = nil
+	s.sourcingCoordinatorMu.Unlock()
 	return s
 }
 

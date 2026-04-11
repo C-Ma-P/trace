@@ -8,6 +8,12 @@ import (
 	"strings"
 )
 
+const (
+	ProviderDigiKey = "DigiKey"
+	ProviderMouser  = "Mouser"
+	ProviderLCSC    = "LCSC"
+)
+
 type Config struct {
 	DigiKey DigiKeyConfig
 	Mouser  MouserConfig
@@ -107,6 +113,11 @@ type ProviderInfo struct {
 	Enabled bool
 }
 
+type AssetProbeProvider interface {
+	Provider
+	ProbeOffer(ctx context.Context, offer SupplierOffer) (SupplierOffer, error)
+}
+
 // Providers returns metadata about each configured provider.
 func (s *Service) Providers() []ProviderInfo {
 	out := make([]ProviderInfo, len(s.providers))
@@ -145,6 +156,11 @@ func (s *Service) SourceFromProvider(ctx context.Context, query RequirementQuery
 		status.Status = "success"
 		status.OfferCount = len(offers)
 		result.Providers = append(result.Providers, status)
+		for i := range offers {
+			if offers[i].AssetProbeState == "" {
+				offers[i].AssetProbeState = AssetProbeStateUnknown
+			}
+		}
 		result.Offers = RankOffers(query, offers)
 		return result
 	}
@@ -183,6 +199,11 @@ func (s *Service) Source(ctx context.Context, query RequirementQuery) SourceResu
 		status.Status = "success"
 		status.OfferCount = len(offers)
 		result.Providers = append(result.Providers, status)
+		for i := range offers {
+			if offers[i].AssetProbeState == "" {
+				offers[i].AssetProbeState = AssetProbeStateUnknown
+			}
+		}
 		result.Offers = append(result.Offers, offers...)
 	}
 
@@ -222,4 +243,28 @@ func (s *Service) LookupByVendorPartID(ctx context.Context, vendor, partID strin
 		}
 	}
 	return SupplierOffer{}, fmt.Errorf("provider %q not found or not enabled", vendor)
+}
+
+func (s *Service) ProbeOffer(ctx context.Context, offer SupplierOffer) (SupplierOffer, error) {
+	for _, p := range s.providers {
+		if !strings.EqualFold(p.Name(), offer.Provider) || !p.Enabled() {
+			continue
+		}
+		if probeProvider, ok := p.(AssetProbeProvider); ok {
+			result, err := probeProvider.ProbeOffer(ctx, offer)
+			if err != nil {
+				result.AssetProbeState = AssetProbeStateError
+				result.AssetProbeError = err.Error()
+			}
+			if result.AssetProbeState == "" {
+				result.AssetProbeState = AssetProbeStateProbed
+			}
+			return result, err
+		}
+		if offer.AssetProbeState == "" {
+			offer.AssetProbeState = AssetProbeStateUnknown
+		}
+		return offer, nil
+	}
+	return SupplierOffer{}, fmt.Errorf("provider %q not found or not enabled", offer.Provider)
 }

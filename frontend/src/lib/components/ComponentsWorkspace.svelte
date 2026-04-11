@@ -25,7 +25,16 @@
     setFilterAndReload,
   } = createComponentsWorkspaceStore();
 
+  let { requestedComponentId = null }: { requestedComponentId?: string | null } = $props();
+  let lastRequestedComponentId: string | null = $state(null);
   let showCreateModal = $state(false);
+
+  $effect(() => {
+    if (requestedComponentId && requestedComponentId !== lastRequestedComponentId) {
+      lastRequestedComponentId = requestedComponentId;
+      void selectComponent(requestedComponentId);
+    }
+  });
 
   onMount(async () => {
     await init();

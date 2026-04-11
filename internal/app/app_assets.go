@@ -307,13 +307,22 @@ func (a *App) ImportEasyEDAAssets(input ImportEasyEDAInput) (ImportEasyEDARespon
 	if err != nil {
 		return ImportEasyEDAResponse{}, fmt.Errorf("listing existing assets: %w", err)
 	}
-	for _, asset := range existing {
-		if asset.Source == "easyeda" {
-			return ImportEasyEDAResponse{
-				Warnings: []string{"EasyEDA assets already imported for this component"},
-				Errors:   []string{},
-			}, nil
-		}
+	skip, warnings := shouldSkipEasyEDAImport(existing)
+	hasSymbol, hasFootprint, has3D, symbolAssetID, footprintAssetID, model3DAssetID := summarizeExistingEasyEDAAssets(existing)
+	if skip {
+		selectWarnings := a.autoSelectExistingEasyEDAAssets(ctx, input.ComponentID, existing)
+		warnings = append(warnings, selectWarnings...)
+		return ImportEasyEDAResponse{
+			LCSCID:            lcscID,
+			SymbolImported:    hasSymbol,
+			FootprintImported: hasFootprint,
+			Model3DImported:   has3D,
+			SymbolAssetID:     symbolAssetID,
+			FootprintAssetID:  footprintAssetID,
+			Model3DAssetID:    model3DAssetID,
+			Warnings:          warnings,
+			Errors:            []string{},
+		}, nil
 	}
 
 	result, err := a.easyeda.ImportComponentAssets(ctx, easyedaprovider.ImportRequest{
@@ -322,6 +331,9 @@ func (a *App) ImportEasyEDAAssets(input ImportEasyEDAInput) (ImportEasyEDARespon
 	})
 	if err != nil {
 		return ImportEasyEDAResponse{}, err
+	}
+	if len(warnings) > 0 {
+		result.Warnings = append(warnings, result.Warnings...)
 	}
 	if result.SymbolAssetID != "" {
 		if selErr := a.svc.SetSelectedComponentAsset(ctx, input.ComponentID, domain.AssetTypeSymbol, result.SymbolAssetID); selErr != nil {
@@ -339,7 +351,7 @@ func (a *App) ImportEasyEDAAssets(input ImportEasyEDAInput) (ImportEasyEDARespon
 		}
 	}
 
-	warnings := result.Warnings
+	warnings = result.Warnings
 	if warnings == nil {
 		warnings = []string{}
 	}
@@ -359,6 +371,106 @@ func (a *App) ImportEasyEDAAssets(input ImportEasyEDAInput) (ImportEasyEDARespon
 		Warnings:          warnings,
 		Errors:            errors,
 	}, nil
+}
+
+func shouldSkipEasyEDAImport(existing []domain.ComponentAsset) (bool, []string) {
+	haveSymbol := false
+	haveFootprint := false
+	have3DModel := false
+	anyEasyEDA := false
+	for _, asset := range existing {
+		if asset.Source != "easyeda" {
+			continue
+		}
+		anyEasyEDA = true
+		switch asset.AssetType {
+		case domain.AssetTypeSymbol:
+			haveSymbol = true
+		case domain.AssetTypeFootprint:
+			haveFootprint = true
+		case domain.AssetType3DModel:
+			have3DModel = true
+		}
+	}
+	if !anyEasyEDA {
+		return false, nil
+	}
+	if haveSymbol && haveFootprint && have3DModel {
+		return true, []string{"EasyEDA assets already imported for this component"}
+	}
+	return false, []string{"Some EasyEDA assets are already imported for this component; missing asset types will still be imported."}
+}
+
+func summarizeExistingEasyEDAAssets(existing []domain.ComponentAsset) (bool, bool, bool, string, string, string) {
+	hasSymbol := false
+	hasFootprint := false
+	has3DModel := false
+	symbolID := ""
+	footprintID := ""
+	model3DID := ""
+	for _, asset := range existing {
+		if asset.Source != "easyeda" {
+			continue
+		}
+		switch asset.AssetType {
+		case domain.AssetTypeSymbol:
+			if !hasSymbol {
+				hasSymbol = true
+				symbolID = asset.ID
+			}
+		case domain.AssetTypeFootprint:
+			if !hasFootprint {
+				hasFootprint = true
+				footprintID = asset.ID
+			}
+		case domain.AssetType3DModel:
+			if !has3DModel {
+				has3DModel = true
+				model3DID = asset.ID
+			}
+		}
+	}
+	return hasSymbol, hasFootprint, has3DModel, symbolID, footprintID, model3DID
+}
+
+func (a *App) autoSelectExistingEasyEDAAssets(ctx context.Context, componentID string, existing []domain.ComponentAsset) []string {
+	detail, err := a.svc.GetComponentWithAssets(ctx, componentID)
+	if err != nil {
+		return []string{fmt.Sprintf("unable to verify selected assets: %v", err)}
+	}
+
+	var warnings []string
+	if detail.SelectedSymbolAsset == nil {
+		if assetID := firstExistingAssetID(existing, domain.AssetTypeSymbol); assetID != "" {
+			if err := a.svc.SetSelectedComponentAsset(ctx, componentID, domain.AssetTypeSymbol, assetID); err != nil {
+				warnings = append(warnings, fmt.Sprintf("auto-select symbol: %v", err))
+			}
+		}
+	}
+	if detail.SelectedFootprintAsset == nil {
+		if assetID := firstExistingAssetID(existing, domain.AssetTypeFootprint); assetID != "" {
+			if err := a.svc.SetSelectedComponentAsset(ctx, componentID, domain.AssetTypeFootprint, assetID); err != nil {
+				warnings = append(warnings, fmt.Sprintf("auto-select footprint: %v", err))
+			}
+		}
+	}
+	if detail.Selected3DModelAsset == nil {
+		if assetID := firstExistingAssetID(existing, domain.AssetType3DModel); assetID != "" {
+			if err := a.svc.SetSelectedComponentAsset(ctx, componentID, domain.AssetType3DModel, assetID); err != nil {
+				warnings = append(warnings, fmt.Sprintf("auto-select 3d model: %v", err))
+			}
+		}
+	}
+	return warnings
+}
+
+func firstExistingAssetID(existing []domain.ComponentAsset, assetType domain.AssetType) string {
+	for _, asset := range existing {
+		if asset.Source == "easyeda" && asset.AssetType == assetType {
+			return asset.ID
+		}
+	}
+	return ""
 }
 
 // ReadAssetFile reads the file contents of a component asset and returns them

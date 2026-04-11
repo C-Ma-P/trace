@@ -7,6 +7,7 @@ import (
 
 	"trace/internal/domain"
 	"trace/internal/domain/registry"
+	"trace/internal/sourcing"
 )
 
 func (s *Service) CreateProject(ctx context.Context, project domain.Project) (domain.Project, error) {
@@ -190,6 +191,21 @@ func (s *Service) PlanProject(ctx context.Context, projectID string) (domain.Pro
 		offers := offersByReq[requirement.ID]
 		if offers == nil {
 			offers = []domain.SavedSupplierOffer{}
+		}
+
+		preferredOfferIDs := make(map[string]struct{})
+		for _, c := range candidates {
+			if c.Preferred && c.Origin == domain.CandidateOriginProvider && c.SourceOfferID != nil {
+				preferredOfferIDs[*c.SourceOfferID] = struct{}{}
+			}
+		}
+		for i := range offers {
+			if _, ok := preferredOfferIDs[offers[i].ID]; !ok {
+				continue
+			}
+			if offers[i].AssetProbeState == "" || offers[i].AssetProbeState == string(sourcing.AssetProbeStateUnknown) {
+				s.maybeEnrichSavedSupplierOffer(ctx, &offers[i])
+			}
 		}
 
 		readiness := s.computeExportReadiness(ctx, candidates)

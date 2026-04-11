@@ -149,6 +149,11 @@ export interface SupplierOffer {
   productUrl: string;
   datasheetUrl: string;
   imageUrl: string;
+  hasSymbol: boolean;
+  hasFootprint: boolean;
+  hasDatasheet: boolean;
+  assetProbeState?: string;
+  assetProbeError?: string;
   lifecycle: string;
   matchScore: number;
   matchReasons: string[];
@@ -195,6 +200,10 @@ export interface SavedSupplierOffer {
   providerPartId: string;
   productUrl: string;
   imageUrl: string;
+  datasheetUrl: string;
+  hasSymbol: boolean;
+  hasFootprint: boolean;
+  hasDatasheet: boolean;
   manufacturer: string;
   mpn: string;
   description: string;
@@ -203,6 +212,9 @@ export interface SavedSupplierOffer {
   moq: number | null;
   unitPrice: number | null;
   currency: string;
+  assetProbeState?: string;
+  assetProbeError?: string;
+  probeCompletedAt?: string;
   linkedComponentId: string | null;
   capturedAt: string;
   createdAt: string;
@@ -630,6 +642,10 @@ export function getSourcingProviders(): Promise<SourcingProviderInfo[]> {
   return call('GetSourcingProviders');
 }
 
+export function probeSupplierOffer(offer: SupplierOffer): Promise<SupplierOffer> {
+  return call('ProbeSupplierOffer', offer);
+}
+
 export function selectComponentForRequirement(
   requirementId: string,
   componentId: string
@@ -681,6 +697,7 @@ export function saveSupplierOffer(input: {
   providerPartId: string;
   productUrl: string;
   imageUrl: string;
+  datasheetUrl: string;
   manufacturer: string;
   mpn: string;
   description: string;
@@ -689,6 +706,8 @@ export function saveSupplierOffer(input: {
   moq: number | null;
   unitPrice: number | null;
   currency: string;
+  assetProbeState?: string;
+  assetProbeError?: string;
 }): Promise<SavedSupplierOffer> {
   return call('SaveSupplierOffer', input);
 }
@@ -699,6 +718,10 @@ export function importSupplierOffer(input: {
   providerPartId: string;
   productUrl: string;
   imageUrl: string;
+  datasheetUrl: string;
+  hasSymbol: boolean;
+  hasFootprint: boolean;
+  hasDatasheet: boolean;
   manufacturer: string;
   mpn: string;
   description: string;
@@ -707,6 +730,8 @@ export function importSupplierOffer(input: {
   moq: number | null;
   unitPrice: number | null;
   currency: string;
+  assetProbeState?: string;
+  assetProbeError?: string;
   setPreferred: boolean;
 }): Promise<ImportSupplierOfferResult> {
   return call('ImportSupplierOffer', input);
@@ -722,6 +747,7 @@ export function addProviderCandidate(input: {
   providerPartId: string;
   productUrl: string;
   imageUrl: string;
+  datasheetUrl: string;
   manufacturer: string;
   mpn: string;
   description: string;
@@ -730,6 +756,8 @@ export function addProviderCandidate(input: {
   moq: number | null;
   unitPrice: number | null;
   currency: string;
+  assetProbeState?: string;
+  assetProbeError?: string;
   setPreferred: boolean;
 }): Promise<PartCandidate> {
   return call('AddProviderCandidate', input);
@@ -877,6 +905,16 @@ export function categoryDisplayName(
 
 // ---------- Phone Intake ----------
 
+export interface ActivityEvent {
+  id: string;
+  timestamp: string;
+  domain: 'activity' | 'sourcing' | 'phone' | 'import' | 'asset-probe';
+  severity: 'info' | 'success' | 'warning' | 'error';
+  kind?: string;
+  message: string;
+  metadata?: Record<string, unknown>;
+}
+
 export interface PhoneIntakeInfo {
   available: boolean;
   active: boolean;
@@ -903,6 +941,10 @@ export interface InventoryBag {
   componentId: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export function getActivityEvents(): Promise<ActivityEvent[]> {
+  return call('GetActivityEvents');
 }
 
 export function getPhoneIntakeInfo(): Promise<PhoneIntakeInfo> {

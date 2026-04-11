@@ -37,6 +37,12 @@
     if (state.state === 'incomplete') return 'badge badge-warning';
     return 'badge';
   }
+
+  function messageClass(state: SupplierProviderConfig | null): string {
+    if (!state) return 'provider-message';
+    if (state.state === 'configured') return 'provider-message';
+    return 'provider-message provider-message-warning';
+  }
 </script>
 
 <section class="provider-block">
@@ -71,7 +77,7 @@
   </div>
 
   {#if message}
-    <p class="provider-message">{message}</p>
+    <p class={messageClass(status)}>{message}</p>
   {/if}
 
   <div class="provider-fields">
@@ -161,6 +167,9 @@
     padding: 10px 16px 0;
     color: var(--color-text-secondary);
     line-height: 1.45;
+  }
+  .provider-message-warning {
+    color: var(--color-warning-text);
   }
 
   .provider-fields {

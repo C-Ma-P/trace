@@ -44,7 +44,7 @@ func NewDigiKeyProvider(config DigiKeyConfig) *DigiKeyProvider {
 }
 
 func (p *DigiKeyProvider) Name() string {
-	return "DigiKey"
+	return ProviderDigiKey
 }
 
 func (p *DigiKeyProvider) Enabled() bool {
@@ -166,7 +166,7 @@ func normalizeDigiKeyProduct(product digikey.Product) SupplierOffer {
 	}
 
 	return SupplierOffer{
-		Provider:           "DigiKey",
+		Provider:           ProviderDigiKey,
 		Manufacturer:       strings.TrimSpace(product.Manufacturer.Name),
 		MPN:                strings.TrimSpace(product.ManufacturerProductNumber),
 		SupplierPartNumber: strings.TrimSpace(product.DigiKeyProductNumber),
@@ -177,9 +177,30 @@ func normalizeDigiKeyProduct(product digikey.Product) SupplierOffer {
 		UnitPrice:          floatPointer(unitPrice),
 		ProductURL:         strings.TrimSpace(product.ProductURL),
 		DatasheetURL:       strings.TrimSpace(product.DatasheetURL),
+		ImageURL:           imageURLFromDigiKeyProduct(product),
 		Lifecycle:          lifecycle,
+		HasSymbol:          false,
+		HasFootprint:       false,
+		HasDatasheet:       strings.TrimSpace(product.DatasheetURL) != "",
 		Raw:                raw,
 	}
+}
+
+func imageURLFromDigiKeyProduct(product digikey.Product) string {
+	if url := strings.TrimSpace(product.PhotoURL); url != "" {
+		return url
+	}
+	if url := strings.TrimSpace(product.PrimaryPhoto.URL); url != "" {
+		return url
+	}
+	for _, link := range product.MediaLinks {
+		if strings.EqualFold(strings.TrimSpace(link.MediaType), "Photo") {
+			if url := strings.TrimSpace(link.URL); url != "" {
+				return url
+			}
+		}
+	}
+	return ""
 }
 
 func bestDigiKeyVariation(variations []digikey.ProductVariation) *digikey.ProductVariation {
