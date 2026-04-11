@@ -207,6 +207,67 @@ func startMDNS(lanIP string, emit activity.Emitter) func() {
 	}
 }
 
+// classifyQuery returns the reply-mode flags for a received query.
+// isLegacy is true when the source port is not 5353 — RFC 6762 §6.7 requires a
+// unicast DNS reply (question echoed, cache-flush cleared, TTL ≤ 10 s) in that case.
+// quBitSet is true when any question has the QU (Query Unicast) bit set in Qclass.
+func classifyQuery(src *net.UDPAddr, questions []dns.Question) (isLegacy, quBitSet bool) {
+	// RFC 6762 §6.7: source port ≠ 5353 signals a legacy/one-shot querier that
+	// will not listen for multicast responses — Android getaddrinfo() takes this path.
+	isLegacy = src.Port != mdnsMcastPort
+	const quBit = 0x8000 // high bit of Qclass in mDNS
+	for _, q := range questions {
+		if q.Qclass&quBit != 0 {
+			quBitSet = true
+			break
+		}
+	}
+	return
+}
+
+// answersForQuestion returns the DNS answer records for a single question
+// targeting stableHostname.  Returns nil for questions about other names or
+// unsupported record types.
+func answersForQuestion(q dns.Question, aRec dns.RR, ip6Addrs []net.IP) []dns.RR {
+	// Compare without trailing dot.
+	name := q.Name
+	if len(name) > 0 && name[len(name)-1] == '.' {
+		name = name[:len(name)-1]
+	}
+	if name != stableHostname {
+		return nil
+	}
+	switch q.Qtype {
+	case dns.TypeA:
+		return []dns.RR{aRec}
+	case dns.TypeANY:
+		ans := []dns.RR{aRec}
+		for _, ip6 := range ip6Addrs {
+			ans = append(ans, buildAAAARecord(ip6))
+		}
+		return ans
+	case dns.TypeAAAA:
+		if len(ip6Addrs) > 0 {
+			ans := make([]dns.RR, len(ip6Addrs))
+			for i, ip6 := range ip6Addrs {
+				ans[i] = buildAAAARecord(ip6)
+			}
+			return ans
+		}
+		// RFC 6762 §6.1: send NSEC to signal authoritative "no AAAA" so
+		// the resolver does not have to wait for the full negative TTL.
+		return []dns.RR{buildNSECRecord()}
+	case dns.TypeHTTPS:
+		// TYPE_HTTPS (65): Android DnsResolver / Chrome may issue this concurrently
+		// with A/AAAA as part of Happy Eyeballs v2 / HTTPS upgrade hint resolution.
+		// We do not publish HTTPS service binding (SVCB) data, so respond with an
+		// authoritative NSEC negative (A exists; HTTPS does not).  This lets
+		// the resolver fail fast rather than waiting for a timeout.
+		return []dns.RR{buildNSECNoHTTPSRecord()}
+	}
+	return nil
+}
+
 // mdnsRespond reads mDNS queries from conn and replies for stableHostname.
 //
 // Per RFC 6762 §6.7 it distinguishes three query classes:
@@ -214,9 +275,9 @@ func startMDNS(lanIP string, emit activity.Emitter) func() {
 //   - legacy/one-shot:    source port ≠ 5353 → unicast reply, DNS format (question echoed)
 //   - normal mDNS:        source port = 5353, no QU bit → multicast reply, mDNS format
 //
-// It handles A, ANY, and AAAA queries for stableHostname.  For AAAA queries on
-// a host with no routable IPv6 address, it returns an NSEC negative response
-// per RFC 6762 §6.1 so Android resolvers can promptly fall back to A.
+// It handles A, ANY, AAAA, and HTTPS queries for stableHostname.  For AAAA/HTTPS
+// queries when no matching record exists, it returns an NSEC negative response
+// per RFC 6762 §6.1 so Android resolvers can fail fast instead of timing out.
 func mdnsRespond(ctx context.Context, conn *net.UDPConn, ip4 net.IP, ip6Addrs []net.IP, emit activity.Emitter) {
 	buf := make([]byte, 65535)
 	aRec := buildARecord(ip4)
@@ -243,101 +304,15 @@ func mdnsRespond(ctx context.Context, conn *net.UDPConn, ip4 net.IP, ip6Addrs []
 			continue // ignore responses from other devices
 		}
 
-		// Log the packet summary so we can see every query type Chrome/Android sends.
-		log.Printf("[phone-intake] mDNS: packet from %s:%d — %d question(s)",
-			src.IP, src.Port, len(query.Question))
+		isLegacy, quBitSet := classifyQuery(src, query.Question)
 
 		var answers []dns.RR
-		quBitSet := false
 		for _, q := range query.Question {
-			// The high bit of Qclass is the QU (Query Unicast) flag in mDNS.
-			const quBit = 0x8000
-			if q.Qclass&quBit != 0 {
-				quBitSet = true
-			}
-
-			// Resolve a human-readable type name; fall back to the numeric value.
-			qtypeName := dns.TypeToString[q.Qtype]
-			if qtypeName == "" {
-				qtypeName = fmt.Sprintf("TYPE%d", q.Qtype)
-			}
-
-			// Compare without trailing dot.
-			name := q.Name
-			if len(name) > 0 && name[len(name)-1] == '.' {
-				name = name[:len(name)-1]
-			}
-			if name != stableHostname {
-				log.Printf("[phone-intake] mDNS: qtype %s(%d) for %q (not us) from %s:%d — skipped",
-					qtypeName, q.Qtype, name, src.IP, src.Port)
-				continue
-			}
-			switch q.Qtype {
-			case dns.TypeA:
-				log.Printf("[phone-intake] mDNS: A(%d) query from %s:%d", q.Qtype, src.IP, src.Port)
-				emit.Emit(activity.NewPhoneEvent(activity.SeverityInfo, "mdns-query",
-					fmt.Sprintf("mDNS: A query from %s:%d", src.IP, src.Port),
-					map[string]any{"qtype": "A", "qtypeNum": q.Qtype, "from": fmt.Sprintf("%s:%d", src.IP, src.Port)}))
-				answers = append(answers, aRec)
-			case dns.TypeANY:
-				log.Printf("[phone-intake] mDNS: ANY(%d) query from %s:%d", q.Qtype, src.IP, src.Port)
-				emit.Emit(activity.NewPhoneEvent(activity.SeverityInfo, "mdns-query",
-					fmt.Sprintf("mDNS: ANY query from %s:%d", src.IP, src.Port),
-					map[string]any{"qtype": "ANY", "qtypeNum": q.Qtype, "from": fmt.Sprintf("%s:%d", src.IP, src.Port)}))
-				answers = append(answers, aRec)
-				for _, ip6 := range ip6Addrs {
-					answers = append(answers, buildAAAARecord(ip6))
-				}
-			case dns.TypeAAAA:
-				if len(ip6Addrs) > 0 {
-					log.Printf("[phone-intake] mDNS: AAAA(%d) query from %s:%d → positive (%d addr)",
-						q.Qtype, src.IP, src.Port, len(ip6Addrs))
-					emit.Emit(activity.NewPhoneEvent(activity.SeverityInfo, "mdns-query",
-						fmt.Sprintf("mDNS: AAAA query from %s:%d → positive (%d addr)", src.IP, src.Port, len(ip6Addrs)),
-						map[string]any{"qtype": "AAAA", "qtypeNum": q.Qtype, "from": fmt.Sprintf("%s:%d", src.IP, src.Port)}))
-					for _, ip6 := range ip6Addrs {
-						answers = append(answers, buildAAAARecord(ip6))
-					}
-				} else {
-					// RFC 6762 §6.1: send NSEC to signal authoritative "no AAAA" so
-					// the resolver does not have to wait for the full negative TTL.
-					log.Printf("[phone-intake] mDNS: AAAA(%d) query from %s:%d → NSEC negative (no IPv6)",
-						q.Qtype, src.IP, src.Port)
-					emit.Emit(activity.NewPhoneEvent(activity.SeverityInfo, "mdns-query",
-						fmt.Sprintf("mDNS: AAAA query from %s:%d → NSEC negative (no IPv6)", src.IP, src.Port),
-						map[string]any{"qtype": "AAAA", "qtypeNum": q.Qtype, "from": fmt.Sprintf("%s:%d", src.IP, src.Port), "nsec": true}))
-					answers = append(answers, buildNSECRecord())
-				}
-			case dns.TypeHTTPS:
-				// TYPE_HTTPS (65): Android DnsResolver / Chrome may issue this concurrently
-				// with A/AAAA as part of Happy Eyeballs v2 / HTTPS upgrade hint resolution.
-				// We do not publish HTTPS service binding (SVCB) data, so respond with an
-				// authoritative NSEC negative (A exists; HTTPS does not).  This lets
-				// the resolver fail fast rather than waiting for a timeout.
-				log.Printf("[phone-intake] mDNS: HTTPS(%d) query from %s:%d → NSEC negative (no HTTPS RR)",
-					q.Qtype, src.IP, src.Port)
-				emit.Emit(activity.NewPhoneEvent(activity.SeverityInfo, "mdns-query",
-					fmt.Sprintf("mDNS: HTTPS(%d) query from %s:%d → NSEC negative", q.Qtype, src.IP, src.Port),
-					map[string]any{"qtype": "HTTPS", "qtypeNum": q.Qtype, "from": fmt.Sprintf("%s:%d", src.IP, src.Port), "nsec": true}))
-				answers = append(answers, buildNSECNoHTTPSRecord())
-			default:
-				log.Printf("[phone-intake] mDNS: qtype %s(%d) query from %s:%d — no answer (unsupported type)",
-					qtypeName, q.Qtype, src.IP, src.Port)
-				emit.Emit(activity.NewPhoneEvent(activity.SeverityInfo, "mdns-query",
-					fmt.Sprintf("mDNS: %s(%d) query from %s:%d — unsupported", qtypeName, q.Qtype, src.IP, src.Port),
-					map[string]any{"qtype": qtypeName, "qtypeNum": q.Qtype, "from": fmt.Sprintf("%s:%d", src.IP, src.Port)}))
-			}
+			answers = append(answers, answersForQuestion(q, aRec, ip6Addrs)...)
 		}
 		if len(answers) == 0 {
 			continue
 		}
-
-		// Legacy/one-shot: any query arriving from a source port other than 5353.
-		// RFC 6762 §6.7: "If the source UDP port in a received Multicast DNS query
-		// is not port 5353, this indicates that the querier will not be listening
-		// for Multicast DNS responses, and that therefore all responses MUST be
-		// sent via normal (unicast) DNS to the querier's port."
-		isLegacy := src.Port != mdnsMcastPort
 
 		resp := new(dns.Msg)
 		resp.SetReply(&query)
@@ -376,11 +351,7 @@ func mdnsRespond(ctx context.Context, conn *net.UDPConn, ip4 net.IP, ip6Addrs []
 		case isLegacy:
 			// RFC 6762 §6.7 legacy unicast: source port ≠ 5353 → unicast DNS reply.
 			// cache-flush cleared, TTL ≤ mdnsLegacyMaxTTL, question echoed, ID preserved.
-			log.Printf("[phone-intake] mDNS: RFC6762§6.7 legacy-unicast reply to %s (%d answer(s), cache-flush cleared, TTL≤%ds)",
-				src, len(resp.Answer), mdnsLegacyMaxTTL)
-			emit.Emit(activity.NewPhoneEvent(activity.SeverityInfo, "mdns-legacy-reply",
-				fmt.Sprintf("mDNS: RFC6762§6.7 legacy reply to %s (%d answers, TTL≤%ds)", src, len(resp.Answer), mdnsLegacyMaxTTL),
-				map[string]any{"dst": src.String(), "answers": len(resp.Answer), "maxTTL": mdnsLegacyMaxTTL}))
+			log.Printf("[phone-intake] mDNS: legacy-unicast reply to %s (%d answer(s))", src, len(resp.Answer))
 			if _, err := conn.WriteToUDP(packed, src); err != nil {
 				msg := fmt.Sprintf("mDNS: legacy unicast write error to %s: %v", src, err)
 				log.Printf("[phone-intake] %s", msg)
@@ -389,7 +360,6 @@ func mdnsRespond(ctx context.Context, conn *net.UDPConn, ip4 net.IP, ip6Addrs []
 			}
 		default:
 			// Normal mDNS query from port 5353 → multicast reply.
-			log.Printf("[phone-intake] mDNS: multicast reply to %s (%d answer(s))", mdnsGroupUDPAddr, len(resp.Answer))
 			if _, err := conn.WriteToUDP(packed, mdnsGroupUDPAddr); err != nil {
 				msg := fmt.Sprintf("mDNS: multicast write error: %v", err)
 				log.Printf("[phone-intake] %s", msg)
@@ -508,7 +478,7 @@ func verifyMDNSResolution(lanIP string, checkIface net.Interface, emit activity.
 				continue
 			}
 			if a.A.Equal(net.ParseIP(lanIP)) {
-				msg := fmt.Sprintf("mDNS self-check: %s → %s ✓", stableHostname, a.A)
+				msg := fmt.Sprintf("mDNS: %s → %s ✓", stableHostname, a.A)
 				log.Printf("[phone-intake] %s", msg)
 				emit.Emit(activity.NewPhoneEvent(activity.SeveritySuccess, "mdns-check-ok", msg,
 					map[string]any{"ip": lanIP, "iface": checkIface.Name, "resolvedIP": a.A.String()}))
@@ -646,8 +616,7 @@ func verifyMDNSOneShotResolution(lanIP string, emit activity.Emitter) {
 						map[string]any{"ip": lanIP, "resolvedIP": a.A.String(), "violations": violations}))
 					return
 				}
-				msg := fmt.Sprintf(
-					"mDNS one-shot self-check: %s → %s ✓ RFC6762§6.7 compliant (ID echoed, question present, cache-flush clear, TTL=%ds)",
+				msg := fmt.Sprintf("mDNS: one-shot %s → %s ✓ (RFC6762§6.7, TTL=%ds)",
 					stableHostname, a.A, a.Hdr.Ttl)
 				log.Printf("[phone-intake] %s", msg)
 				emit.Emit(activity.NewPhoneEvent(activity.SeveritySuccess, "mdns-oneshot-check-ok", msg,
@@ -740,7 +709,7 @@ func verifyMDNSOneShotAAAAResolution(lanIP string, emit activity.Emitter) {
 					name = name[:len(name)-1]
 				}
 				if name == stableHostname {
-					msg := fmt.Sprintf("mDNS AAAA self-check: %s → %s ✓ (AAAA answer)", stableHostname, rec.AAAA)
+					msg := fmt.Sprintf("mDNS: AAAA self-check %s → %s ✓", stableHostname, rec.AAAA)
 					log.Printf("[phone-intake] %s", msg)
 					emit.Emit(activity.NewPhoneEvent(activity.SeveritySuccess, "mdns-aaaa-check-ok", msg,
 						map[string]any{"ip": lanIP, "ipv6": rec.AAAA.String()}))
@@ -765,7 +734,7 @@ func verifyMDNSOneShotAAAAResolution(lanIP string, emit activity.Emitter) {
 					}
 				}
 				if hasA && !hasAAAA {
-					msg := fmt.Sprintf("mDNS AAAA self-check: %s → NSEC negative (A-only host) ✓", stableHostname)
+					msg := fmt.Sprintf("mDNS: AAAA self-check %s → NSEC (no IPv6) ✓", stableHostname)
 					log.Printf("[phone-intake] %s", msg)
 					emit.Emit(activity.NewPhoneEvent(activity.SeveritySuccess, "mdns-aaaa-check-nsec", msg,
 						map[string]any{"ip": lanIP}))
@@ -854,7 +823,7 @@ func verifyMDNSOneShotHTTPSResolution(lanIP string, emit activity.Emitter) {
 				}
 			}
 			if !hasHTTPS {
-				msg := fmt.Sprintf("mDNS HTTPS self-check: %s → NSEC negative (no HTTPS RR) ✓ — Chrome/Android will not stall on HTTPS lookup", stableHostname)
+				msg := fmt.Sprintf("mDNS: HTTPS self-check %s → NSEC (no HTTPS RR) ✓", stableHostname)
 				log.Printf("[phone-intake] %s", msg)
 				emit.Emit(activity.NewPhoneEvent(activity.SeveritySuccess, "mdns-https-check-nsec", msg,
 					map[string]any{"ip": lanIP}))
