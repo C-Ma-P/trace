@@ -16,6 +16,7 @@ import (
 
 	"trace/internal/activity"
 	"trace/internal/domain"
+	"trace/internal/phoneintake/mdns"
 	"trace/internal/service"
 	"trace/internal/sourcing"
 )
@@ -86,7 +87,25 @@ func (s *Server) Start() error {
 	}
 	s.caCertPEM = pki.CACertPEM
 
-	s.mdnsStop = startMDNS(s.hostSelection.Host, s.reporter)
+	mdnsStop, _ := mdns.Start(mdns.Config{
+		Hostname: stableHostname,
+		IPv4:     s.hostSelection.Host,
+		Hooks: mdns.Hooks{
+			Info: func(kind, msg string, meta map[string]any) {
+				s.reporter.Phone(activity.Phone{Severity: activity.SeverityInfo, Kind: kind, Message: msg, Metadata: meta})
+			},
+			Success: func(kind, msg string, meta map[string]any) {
+				s.reporter.Phone(activity.Phone{Severity: activity.SeveritySuccess, Kind: kind, Message: msg, Metadata: meta})
+			},
+			Warn: func(kind, msg string, meta map[string]any) {
+				s.reporter.Phone(activity.Phone{Severity: activity.SeverityWarning, Kind: kind, Message: msg, Metadata: meta})
+			},
+			Error: func(kind, msg string, meta map[string]any) {
+				s.reporter.Phone(activity.Phone{Severity: activity.SeverityError, Kind: kind, Message: msg, Metadata: meta})
+			},
+		},
+	})
+	s.mdnsStop = mdnsStop
 
 	ln, err := tls.Listen("tcp", fmt.Sprintf(":%d", s.port), pki.TLSConfig)
 	if err != nil {
