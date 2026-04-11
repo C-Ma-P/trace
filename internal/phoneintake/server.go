@@ -32,7 +32,7 @@ type Server struct {
 	svc           *service.Service
 	bags          domain.InventoryBagRepository
 	comps         domain.ComponentRepository
-	emitter       activity.Emitter
+	reporter      *activity.Reporter
 	token         string
 	port          int
 	pkiDir        string
@@ -57,15 +57,12 @@ func NewServer(
 	if port == 0 {
 		port = defaultPort
 	}
-	if emitter == nil {
-		emitter = activity.NopEmitter
-	}
 	token := generateToken()
 	return &Server{
 		svc:           svc,
 		bags:          bags,
 		comps:         comps,
-		emitter:       emitter,
+		reporter:      activity.NewReporter(nil, emitter),
 		token:         token,
 		port:          port,
 		pkiDir:        pkiDir,
@@ -89,7 +86,7 @@ func (s *Server) Start() error {
 	}
 	s.caCertPEM = pki.CACertPEM
 
-	s.mdnsStop = startMDNS(s.hostSelection.Host, s.emitter)
+	s.mdnsStop = startMDNS(s.hostSelection.Host, s.reporter)
 
 	ln, err := tls.Listen("tcp", fmt.Sprintf(":%d", s.port), pki.TLSConfig)
 	if err != nil {
@@ -111,16 +108,18 @@ func (s *Server) Start() error {
 		WriteTimeout: 30 * time.Second,
 	}
 	s.running = true
-	s.emitter.Emit(activity.NewPhoneEvent(activity.SeveritySuccess, "server-started", "Phone intake server started", map[string]any{"port": s.port, "url": s.phoneURLLocked(), "host": s.hostSelection.Host, "hostSource": s.hostSelection.Source}))
+	s.reporter.Emit(activity.NewPhoneEvent(activity.SeveritySuccess, "server-started", "Phone intake server started", map[string]any{"port": s.port, "url": s.phoneURLLocked(), "host": s.hostSelection.Host, "hostSource": s.hostSelection.Source}))
 
 	url := s.phoneURLLocked()
 	go func() {
 		log.Printf("[phone-intake] serving on :%d → %s", s.port, url)
 		if err := s.httpSrv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			msg := fmt.Sprintf("Phone intake server error: %v", err)
-			log.Printf("[phone-intake] server error: %v", err)
-			s.emitter.Emit(activity.NewPhoneEvent(activity.SeverityError, "server-error", msg,
-				map[string]any{"error": err.Error()}))
+			s.reporter.Phone(activity.Phone{
+				Severity: activity.SeverityError,
+				Kind:     "server-error",
+				Message:  fmt.Sprintf("Phone intake server error: %v", err),
+				Metadata: map[string]any{"error": err.Error()},
+			})
 		}
 		s.mu.Lock()
 		s.running = false
@@ -140,7 +139,7 @@ func (s *Server) Stop() {
 	s.mu.Unlock()
 
 	if wasRunning {
-		s.emitter.Emit(activity.NewPhoneEvent(activity.SeverityInfo, "server-stopped", "Phone intake server stopped", map[string]any{"port": s.port}))
+		s.reporter.Emit(activity.NewPhoneEvent(activity.SeverityInfo, "server-stopped", "Phone intake server stopped", map[string]any{"port": s.port}))
 	}
 
 	stopMDNS()
@@ -258,7 +257,7 @@ func (s *Server) handleCACert(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "certificate not available", http.StatusServiceUnavailable)
 		return
 	}
-	s.emitter.Emit(activity.NewPhoneEvent(activity.SeverityInfo, "ca-cert-served", "CA certificate downloaded by phone", map[string]any{"remoteAddr": r.RemoteAddr}))
+	s.reporter.Emit(activity.NewPhoneEvent(activity.SeverityInfo, "ca-cert-served", "CA certificate downloaded by phone", map[string]any{"remoteAddr": r.RemoteAddr}))
 	w.Header().Set("Content-Type", "application/x-x509-ca-cert")
 	w.Header().Set("Content-Disposition", `attachment; filename="trace-ca.crt"`)
 	w.Header().Set("Cache-Control", "no-store")
@@ -321,15 +320,19 @@ func (s *Server) handleScanPost(w http.ResponseWriter, r *http.Request) {
 
 	resp := ScanResponse{OK: true, ID: id, Quantity: quantity}
 
-	s.emitter.Emit(activity.NewPhoneEvent(activity.SeverityInfo, "scan-received", "Phone scan received", map[string]any{"vendor": req.Vendor, "format": req.Format, "rawValue": req.RawValue, "quantity": quantity}))
+	s.reporter.Emit(activity.NewPhoneEvent(activity.SeverityInfo, "scan-received", "Phone scan received", map[string]any{"vendor": req.Vendor, "format": req.Format, "rawValue": req.RawValue, "quantity": quantity}))
 
 	if vendorPartID != "" {
 		offer, err := s.svc.LookupVendorPartID(r.Context(), req.Vendor, vendorPartID)
 		if err != nil {
 			scan.Error = err.Error()
 			resp.ResolveError = err.Error()
-			s.emitter.Emit(activity.NewPhoneEvent(activity.SeverityWarning, "lookup-failed", "Vendor lookup failed", map[string]any{"vendor": req.Vendor, "partId": vendorPartID, "error": err.Error()}))
-			log.Printf("[phone-intake] lookup failed vendor=%s partID=%s: %v", req.Vendor, vendorPartID, err)
+			s.reporter.Phone(activity.Phone{
+				Severity: activity.SeverityWarning,
+				Kind:     "lookup-failed",
+				Message:  "Vendor lookup failed",
+				Metadata: map[string]any{"vendor": req.Vendor, "partId": vendorPartID, "error": err.Error()},
+			})
 		} else {
 			// Populate display data from the offer without touching the DB.
 			// Component creation is deferred until handleConfirm.
@@ -349,12 +352,12 @@ func (s *Server) handleScanPost(w http.ResponseWriter, r *http.Request) {
 			scan.Resolved = resolved
 			scan.Offer = &offer
 			resp.Resolved = resolved
-			s.emitter.Emit(activity.NewPhoneEvent(activity.SeveritySuccess, "lookup-succeeded", "Vendor lookup succeeded", map[string]any{"vendor": req.Vendor, "partId": vendorPartID, "mpn": offer.MPN}))
+			s.reporter.Emit(activity.NewPhoneEvent(activity.SeveritySuccess, "lookup-succeeded", "Vendor lookup succeeded", map[string]any{"vendor": req.Vendor, "partId": vendorPartID, "mpn": offer.MPN}))
 		}
 	} else {
 		scan.Error = "no part ID found in barcode"
 		resp.ResolveError = scan.Error
-		s.emitter.Emit(activity.NewPhoneEvent(activity.SeverityWarning, "scan-parse-failed", "Phone scan parse failed", map[string]any{"vendor": req.Vendor, "format": req.Format, "rawValue": req.RawValue}))
+		s.reporter.Emit(activity.NewPhoneEvent(activity.SeverityWarning, "scan-parse-failed", "Phone scan parse failed", map[string]any{"vendor": req.Vendor, "format": req.Format, "rawValue": req.RawValue}))
 	}
 
 	s.mu.Lock()
@@ -421,25 +424,33 @@ func (s *Server) handleConfirm(w http.ResponseWriter, r *http.Request) {
 	}
 	component, err := s.svc.ResolveComponentFromOffer(r.Context(), *scan.Offer)
 	if err != nil {
-		log.Printf("[phone-intake] resolve failed on confirm scan=%s: %v", req.ID, err)
-		s.emitter.Emit(activity.NewPhoneEvent(activity.SeverityError, "confirm-resolve-failed",
-			fmt.Sprintf("Phone scan confirm failed: %v", err),
-			map[string]any{"scanId": req.ID, "error": err.Error()}))
+		s.reporter.Phone(activity.Phone{
+			Severity: activity.SeverityError,
+			Kind:     "confirm-resolve-failed",
+			Message:  fmt.Sprintf("Phone scan confirm failed: %v", err),
+			Metadata: map[string]any{"scanId": req.ID, "error": err.Error()},
+		})
 		writeJSON(w, http.StatusInternalServerError, ConfirmResponse{Error: err.Error()})
 		return
 	}
 	if req.Quantity > 0 {
 		if _, err := s.svc.StampInventory(r.Context(), component.ID, req.Quantity); err != nil {
-			log.Printf("[phone-intake] inventory stamp failed componentID=%s qty=%d: %v", component.ID, req.Quantity, err)
-			s.emitter.Emit(activity.NewPhoneEvent(activity.SeverityError, "inventory-stamp-failed",
-				fmt.Sprintf("Inventory stamp failed: %v", err),
-				map[string]any{"componentId": component.ID, "quantity": req.Quantity, "error": err.Error()}))
+			s.reporter.Phone(activity.Phone{
+				Severity: activity.SeverityError,
+				Kind:     "inventory-stamp-failed",
+				Message:  fmt.Sprintf("Inventory stamp failed: %v", err),
+				Metadata: map[string]any{"componentId": component.ID, "quantity": req.Quantity, "error": err.Error()},
+			})
 			writeJSON(w, http.StatusInternalServerError, ConfirmResponse{Error: err.Error()})
 			return
 		}
 	}
-	s.emitter.Emit(activity.NewPhoneEvent(activity.SeveritySuccess, "scan-imported", "Phone scan imported", map[string]any{"scanId": req.ID, "vendor": scan.Vendor, "componentId": component.ID, "quantity": req.Quantity}))
-	log.Printf("[phone-intake] confirmed scan %s vendor=%s componentID=%s qty=%d", req.ID, scan.Vendor, component.ID, req.Quantity)
+	s.reporter.Phone(activity.Phone{
+		Severity: activity.SeveritySuccess,
+		Kind:     "scan-imported",
+		Message:  "Phone scan imported",
+		Metadata: map[string]any{"scanId": req.ID, "vendor": scan.Vendor, "componentId": component.ID, "quantity": req.Quantity},
+	})
 	writeJSON(w, http.StatusOK, ConfirmResponse{OK: true})
 }
 

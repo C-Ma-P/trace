@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"log"
 	"sort"
 	"strings"
 	"time"
@@ -16,25 +15,18 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
-const defaultSourcingCacheTTL = 30 * time.Second
+const defaultSourcingCacheTTL = 5 * time.Minute
 
 // Coordinator wraps a sourcing.Service and adds request caching and dedupe behavior.
 type Coordinator struct {
 	service           *Service
 	configFingerprint string
-	emitter           activity.Emitter
+	reporter          *activity.Reporter
 	group             singleflight.Group
 	allCache          *cache.TTLCache[string, SourceResult]
 	byProviderCache   *cache.TTLCache[string, SourceResult]
 	lookupCache       *cache.TTLCache[string, SupplierOffer]
 	probeCache        *cache.TTLCache[string, SupplierOffer]
-}
-
-func (c *Coordinator) emit(event activity.Event) {
-	if c == nil || c.emitter == nil {
-		return
-	}
-	c.emitter.Emit(event)
 }
 
 func NewCoordinator(config Config) *Coordinator {
@@ -54,12 +46,9 @@ func NewCoordinatorFromServiceWithEmitter(service *Service, emitter activity.Emi
 }
 
 func newCoordinatorFromService(service *Service, fingerprint string, emitter activity.Emitter) *Coordinator {
-	if emitter == nil {
-		emitter = activity.NopEmitter
-	}
 	return &Coordinator{
 		service:           service,
-		emitter:           emitter,
+		reporter:          activity.NewReporter(nil, emitter),
 		configFingerprint: fingerprint,
 		allCache:          cache.NewTTLCache[string, SourceResult](defaultSourcingCacheTTL),
 		byProviderCache:   cache.NewTTLCache[string, SourceResult](defaultSourcingCacheTTL),
@@ -82,16 +71,24 @@ func (c *Coordinator) Providers() []ProviderInfo {
 
 func (c *Coordinator) Source(ctx context.Context, query RequirementQuery) SourceResult {
 	metadata := eventMetadata(query, "", -1)
-	c.emit(activity.NewSourcingEvent(activity.SeverityInfo, "request-started", "Sourcing request started", metadata))
+	c.reporter.Emit(activity.NewSourcingEvent(activity.SeverityInfo, "request-started", "Sourcing request started", metadata))
 
 	key := BuildRequirementCacheKey(query, c.configFingerprint)
 	if result, ok := c.allCache.Get(key); ok {
-		log.Printf("[sourcing] cache hit source %s", key)
-		c.emit(activity.NewSourcingEvent(activity.SeverityInfo, "cache-hit", "Sourcing cache hit", metadata))
+		c.reporter.Sourcing(activity.Sourcing{
+			Severity: activity.SeverityInfo,
+			Kind:     "cache-hit",
+			Message:  "Sourcing cache hit",
+			Metadata: metadata,
+		})
 		return result
 	}
-	log.Printf("[sourcing] cache miss source %s", key)
-	c.emit(activity.NewSourcingEvent(activity.SeverityInfo, "cache-miss", "Sourcing cache miss", metadata))
+	c.reporter.Sourcing(activity.Sourcing{
+		Severity: activity.SeverityInfo,
+		Kind:     "cache-miss",
+		Message:  "Sourcing cache miss",
+		Metadata: metadata,
+	})
 
 	value, err, shared := c.group.Do("source:"+key, func() (any, error) {
 		result := c.service.Source(ctx, query)
@@ -99,31 +96,47 @@ func (c *Coordinator) Source(ctx context.Context, query RequirementQuery) Source
 		return result, nil
 	})
 	if shared {
-		log.Printf("[sourcing] deduped source %s", key)
-		c.emit(activity.NewSourcingEvent(activity.SeverityInfo, "deduped", "Sourcing request deduped", metadata))
+		c.reporter.Sourcing(activity.Sourcing{
+			Severity: activity.SeverityInfo,
+			Kind:     "deduped",
+			Message:  "Sourcing request deduped",
+			Metadata: metadata,
+		})
 	}
 	if err != nil {
-		log.Printf("[sourcing] source request failed %s: %v", key, err)
-		c.emit(activity.NewSourcingEvent(activity.SeverityError, "request-failed", "Sourcing request failed", mergeMetadata(metadata, map[string]any{"error": err.Error()})))
+		c.reporter.Sourcing(activity.Sourcing{
+			Severity: activity.SeverityError,
+			Kind:     "request-failed",
+			Message:  "Sourcing request failed",
+			Metadata: mergeMetadata(metadata, map[string]any{"error": err.Error()}),
+		})
 		return SourceResult{Providers: []ProviderStatus{{Provider: "", Status: "error", Error: err.Error()}}}
 	}
 	result := value.(SourceResult)
-	c.emit(activity.NewSourcingEvent(activity.SeveritySuccess, "request-completed", "Sourcing request completed", mergeMetadata(metadata, map[string]any{"offers": len(result.Offers)})))
+	c.reporter.Emit(activity.NewSourcingEvent(activity.SeveritySuccess, "request-completed", "Sourcing request completed", mergeMetadata(metadata, map[string]any{"offers": len(result.Offers)})))
 	return result
 }
 
 func (c *Coordinator) SourceFromProvider(ctx context.Context, query RequirementQuery, providerName string) SourceResult {
 	metadata := eventMetadata(query, providerName, -1)
-	c.emit(activity.NewSourcingEvent(activity.SeverityInfo, "request-started", "Provider sourcing started", metadata))
+	c.reporter.Emit(activity.NewSourcingEvent(activity.SeverityInfo, "request-started", "Provider sourcing started", metadata))
 
 	key := BuildRequirementProviderCacheKey(query, providerName, c.configFingerprint)
 	if result, ok := c.byProviderCache.Get(key); ok {
-		log.Printf("[sourcing] cache hit source provider %s", key)
-		c.emit(activity.NewSourcingEvent(activity.SeverityInfo, "cache-hit", "Provider cache hit", metadata))
+		c.reporter.Sourcing(activity.Sourcing{
+			Severity: activity.SeverityInfo,
+			Kind:     "cache-hit",
+			Message:  "Provider cache hit",
+			Metadata: metadata,
+		})
 		return result
 	}
-	log.Printf("[sourcing] cache miss source provider %s", key)
-	c.emit(activity.NewSourcingEvent(activity.SeverityInfo, "cache-miss", "Provider cache miss", metadata))
+	c.reporter.Sourcing(activity.Sourcing{
+		Severity: activity.SeverityInfo,
+		Kind:     "cache-miss",
+		Message:  "Provider cache miss",
+		Metadata: metadata,
+	})
 
 	value, err, shared := c.group.Do("provider:"+key, func() (any, error) {
 		result := c.service.SourceFromProvider(ctx, query, providerName)
@@ -131,31 +144,47 @@ func (c *Coordinator) SourceFromProvider(ctx context.Context, query RequirementQ
 		return result, nil
 	})
 	if shared {
-		log.Printf("[sourcing] deduped source provider %s", key)
-		c.emit(activity.NewSourcingEvent(activity.SeverityInfo, "deduped", "Provider request deduped", metadata))
+		c.reporter.Sourcing(activity.Sourcing{
+			Severity: activity.SeverityInfo,
+			Kind:     "deduped",
+			Message:  "Provider request deduped",
+			Metadata: metadata,
+		})
 	}
 	if err != nil {
-		log.Printf("[sourcing] source provider request failed %s: %v", key, err)
-		c.emit(activity.NewSourcingEvent(activity.SeverityError, "request-failed", "Provider request failed", mergeMetadata(metadata, map[string]any{"error": err.Error()})))
+		c.reporter.Sourcing(activity.Sourcing{
+			Severity: activity.SeverityError,
+			Kind:     "request-failed",
+			Message:  "Provider request failed",
+			Metadata: mergeMetadata(metadata, map[string]any{"error": err.Error()}),
+		})
 		return SourceResult{Providers: []ProviderStatus{{Provider: providerName, Status: "error", Error: err.Error()}}}
 	}
 	result := value.(SourceResult)
-	c.emit(activity.NewSourcingEvent(activity.SeveritySuccess, "provider-offers", "Provider returned offers", mergeMetadata(metadata, map[string]any{"offers": len(result.Offers)})))
+	c.reporter.Emit(activity.NewSourcingEvent(activity.SeveritySuccess, "provider-offers", "Provider returned offers", mergeMetadata(metadata, map[string]any{"offers": len(result.Offers)})))
 	return result
 }
 
 func (c *Coordinator) LookupByVendorPartID(ctx context.Context, vendor, partID string) (SupplierOffer, error) {
 	metadata := map[string]any{"vendor": vendor, "partId": partID}
-	c.emit(activity.NewSourcingEvent(activity.SeverityInfo, "lookup-started", "Vendor lookup started", metadata))
+	c.reporter.Emit(activity.NewSourcingEvent(activity.SeverityInfo, "lookup-started", "Vendor lookup started", metadata))
 
 	key := LookupVendorPartIDCacheKey(vendor, partID, c.configFingerprint)
 	if offer, ok := c.lookupCache.Get(key); ok {
-		log.Printf("[sourcing] cache hit lookup %s", key)
-		c.emit(activity.NewSourcingEvent(activity.SeverityInfo, "cache-hit", "Vendor lookup cache hit", metadata))
+		c.reporter.Sourcing(activity.Sourcing{
+			Severity: activity.SeverityInfo,
+			Kind:     "cache-hit",
+			Message:  "Vendor lookup cache hit",
+			Metadata: metadata,
+		})
 		return offer, nil
 	}
-	log.Printf("[sourcing] cache miss lookup %s", key)
-	c.emit(activity.NewSourcingEvent(activity.SeverityInfo, "cache-miss", "Vendor lookup cache miss", metadata))
+	c.reporter.Sourcing(activity.Sourcing{
+		Severity: activity.SeverityInfo,
+		Kind:     "cache-miss",
+		Message:  "Vendor lookup cache miss",
+		Metadata: metadata,
+	})
 
 	value, err, shared := c.group.Do("lookup:"+key, func() (any, error) {
 		offer, lookupErr := c.service.LookupByVendorPartID(ctx, vendor, partID)
@@ -166,30 +195,42 @@ func (c *Coordinator) LookupByVendorPartID(ctx context.Context, vendor, partID s
 		return offer, nil
 	})
 	if shared {
-		log.Printf("[sourcing] deduped lookup %s", key)
-		c.emit(activity.NewSourcingEvent(activity.SeverityInfo, "deduped", "Vendor lookup deduped", metadata))
+		c.reporter.Sourcing(activity.Sourcing{
+			Severity: activity.SeverityInfo,
+			Kind:     "deduped",
+			Message:  "Vendor lookup deduped",
+			Metadata: metadata,
+		})
 	}
 	if err != nil {
-		c.emit(activity.NewSourcingEvent(activity.SeverityError, "lookup-failed", "Vendor lookup failed", mergeMetadata(metadata, map[string]any{"error": err.Error()})))
+		c.reporter.Emit(activity.NewSourcingEvent(activity.SeverityError, "lookup-failed", "Vendor lookup failed", mergeMetadata(metadata, map[string]any{"error": err.Error()})))
 		return SupplierOffer{}, err
 	}
 	result := value.(SupplierOffer)
-	c.emit(activity.NewSourcingEvent(activity.SeveritySuccess, "lookup-completed", "Vendor lookup completed", mergeMetadata(metadata, map[string]any{"mpn": result.MPN, "provider": result.Provider})))
+	c.reporter.Emit(activity.NewSourcingEvent(activity.SeveritySuccess, "lookup-completed", "Vendor lookup completed", mergeMetadata(metadata, map[string]any{"mpn": result.MPN, "provider": result.Provider})))
 	return result, nil
 }
 
 func (c *Coordinator) ProbeOffer(ctx context.Context, offer SupplierOffer) (SupplierOffer, error) {
 	metadata := map[string]any{"provider": offer.Provider, "mpn": offer.MPN, "supplierPartNumber": offer.SupplierPartNumber}
-	c.emit(activity.NewAssetProbeEvent(activity.SeverityInfo, "probe-started", "Asset probe started", metadata))
+	c.reporter.Emit(activity.NewAssetProbeEvent(activity.SeverityInfo, "probe-started", "Asset probe started", metadata))
 
 	key := ProbeOfferCacheKey(offer, c.configFingerprint)
 	if result, ok := c.probeCache.Get(key); ok {
-		log.Printf("[sourcing] cache hit probe %s", key)
-		c.emit(activity.NewAssetProbeEvent(activity.SeverityInfo, "cache-hit", "Asset probe cache hit", metadata))
+		c.reporter.AssetProbe(activity.AssetProbe{
+			Severity: activity.SeverityInfo,
+			Kind:     "cache-hit",
+			Message:  "Asset probe cache hit",
+			Metadata: metadata,
+		})
 		return result, nil
 	}
-	log.Printf("[sourcing] cache miss probe %s", key)
-	c.emit(activity.NewAssetProbeEvent(activity.SeverityInfo, "cache-miss", "Asset probe cache miss", metadata))
+	c.reporter.AssetProbe(activity.AssetProbe{
+		Severity: activity.SeverityInfo,
+		Kind:     "cache-miss",
+		Message:  "Asset probe cache miss",
+		Metadata: metadata,
+	})
 
 	value, err, shared := c.group.Do("probe:"+key, func() (any, error) {
 		result, probeErr := c.service.ProbeOffer(ctx, offer)
@@ -197,15 +238,19 @@ func (c *Coordinator) ProbeOffer(ctx context.Context, offer SupplierOffer) (Supp
 		return result, probeErr
 	})
 	if shared {
-		log.Printf("[sourcing] deduped probe %s", key)
-		c.emit(activity.NewAssetProbeEvent(activity.SeverityInfo, "deduped", "Asset probe deduped", metadata))
+		c.reporter.AssetProbe(activity.AssetProbe{
+			Severity: activity.SeverityInfo,
+			Kind:     "deduped",
+			Message:  "Asset probe deduped",
+			Metadata: metadata,
+		})
 	}
 	result := value.(SupplierOffer)
 	if err != nil {
-		c.emit(activity.NewAssetProbeEvent(activity.SeverityError, "probe-failed", "Asset probe failed", mergeMetadata(metadata, map[string]any{"error": err.Error()})))
+		c.reporter.Emit(activity.NewAssetProbeEvent(activity.SeverityError, "probe-failed", "Asset probe failed", mergeMetadata(metadata, map[string]any{"error": err.Error()})))
 		return result, err
 	}
-	c.emit(activity.NewAssetProbeEvent(activity.SeveritySuccess, "probe-completed", "Asset probe succeeded", mergeMetadata(metadata, map[string]any{"assetProbeState": result.AssetProbeState, "assetProbeError": result.AssetProbeError})))
+	c.reporter.Emit(activity.NewAssetProbeEvent(activity.SeveritySuccess, "probe-completed", "Asset probe succeeded", mergeMetadata(metadata, map[string]any{"assetProbeState": result.AssetProbeState, "assetProbeError": result.AssetProbeError})))
 	return result, nil
 }
 
