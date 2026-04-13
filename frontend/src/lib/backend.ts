@@ -630,6 +630,16 @@ export function planProject(projectId: string): Promise<ProjectPlan> {
   return call('PlanProject', projectId);
 }
 
+export interface KiCadExportResult {
+  zipBase64: string;
+  filename: string;
+  warnings: string[];
+}
+
+export function exportProjectKiCad(projectId: string): Promise<KiCadExportResult> {
+  return call('ExportProjectKiCad', projectId);
+}
+
 export function sourceRequirement(requirementId: string): Promise<SourceRequirementResult> {
   return call('SourceRequirement', requirementId);
 }
@@ -903,7 +913,6 @@ export function categoryDisplayName(
   return categories.find((c) => c.value === value)?.displayName ?? value;
 }
 
-// ---------- Phone Intake ----------
 
 export interface ActivityEvent {
   id: string;

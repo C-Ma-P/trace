@@ -198,6 +198,36 @@ func genericCategoryName(category domain.Category) string {
 		return "capacitor"
 	case domain.CategoryInductor:
 		return "inductor"
+	case domain.CategoryFerriteBead:
+		return "ferrite bead"
+	case domain.CategoryDiode:
+		return "diode"
+	case domain.CategoryLED:
+		return "LED"
+	case domain.CategoryTransistorBJT:
+		return "BJT"
+	case domain.CategoryTransistorMOSFET:
+		return "MOSFET"
+	case domain.CategoryRegulatorLinear:
+		return "linear regulator"
+	case domain.CategoryRegulatorSwitching:
+		return "switching regulator"
+	case domain.CategoryConnector:
+		return "connector"
+	case domain.CategorySwitch:
+		return "switch"
+	case domain.CategoryCrystalOscillator:
+		return "crystal"
+	case domain.CategoryFuse:
+		return "fuse"
+	case domain.CategoryBattery:
+		return "battery"
+	case domain.CategorySensor:
+		return "sensor"
+	case domain.CategoryModule:
+		return "module"
+	case domain.CategoryIntegratedCircuit:
+		return "IC"
 	default:
 		return "part"
 	}
@@ -211,8 +241,36 @@ func humanCategory(category domain.Category) string {
 		return "Capacitor"
 	case domain.CategoryInductor:
 		return "Inductor"
+	case domain.CategoryFerriteBead:
+		return "Ferrite Bead"
+	case domain.CategoryDiode:
+		return "Diode"
+	case domain.CategoryLED:
+		return "LED"
+	case domain.CategoryTransistorBJT:
+		return "BJT"
+	case domain.CategoryTransistorMOSFET:
+		return "MOSFET"
+	case domain.CategoryRegulatorLinear:
+		return "Linear Regulator"
+	case domain.CategoryRegulatorSwitching:
+		return "Switching Regulator"
+	case domain.CategoryConnector:
+		return "Connector"
+	case domain.CategorySwitch:
+		return "Switch"
+	case domain.CategoryCrystalOscillator:
+		return "Crystal / Osc."
+	case domain.CategoryFuse:
+		return "Fuse"
+	case domain.CategoryBattery:
+		return "Battery"
+	case domain.CategorySensor:
+		return "Sensor"
+	case domain.CategoryModule:
+		return "Module"
 	case domain.CategoryIntegratedCircuit:
-		return "Integrated Circuit"
+		return "IC"
 	default:
 		return string(category)
 	}

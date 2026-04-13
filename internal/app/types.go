@@ -498,7 +498,11 @@ type KiCadImportCommitInput struct {
 	Rows                  []KiCadImportPreviewRow `json:"rows"`
 }
 
-// --- Part Candidates ---
+type KiCadExportResponse struct {
+	ZipBase64 string   `json:"zipBase64"`
+	Filename  string   `json:"filename"`
+	Warnings  []string `json:"warnings"`
+}
 
 type PartCandidateResponse struct {
 	ID            string                      `json:"id"`
@@ -513,8 +517,6 @@ type PartCandidateResponse struct {
 	CreatedAt     string                      `json:"createdAt"`
 	UpdatedAt     string                      `json:"updatedAt"`
 }
-
-// --- Saved Supplier Offers ---
 
 type SaveSupplierOfferInput struct {
 	RequirementID   string   `json:"requirementId"`

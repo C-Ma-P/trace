@@ -5,16 +5,44 @@ import "github.com/C-Ma-P/trace/internal/domain"
 const CanonicalRegistryVersion = 1
 
 var canonical = map[domain.Category]map[string]domain.AttributeDefinition{
-	domain.CategoryResistor:  indexByKey(resistorDefs),
-	domain.CategoryCapacitor: indexByKey(capacitorDefs),
-	domain.CategoryInductor:  indexByKey(inductorDefs),
+	domain.CategoryResistor:           indexByKey(resistorDefs),
+	domain.CategoryCapacitor:          indexByKey(capacitorDefs),
+	domain.CategoryInductor:           indexByKey(inductorDefs),
+	domain.CategoryFerriteBead:        indexByKey(ferriteBeadDefs),
+	domain.CategoryDiode:              indexByKey(diodeDefs),
+	domain.CategoryLED:                indexByKey(ledDefs),
+	domain.CategoryTransistorBJT:      indexByKey(transistorBJTDefs),
+	domain.CategoryTransistorMOSFET:   indexByKey(transistorMOSFETDefs),
+	domain.CategoryRegulatorLinear:    indexByKey(regulatorLinearDefs),
+	domain.CategoryRegulatorSwitching: indexByKey(regulatorSwitchingDefs),
+	domain.CategoryConnector:          indexByKey(connectorDefs),
+	domain.CategorySwitch:             indexByKey(switchDefs),
+	domain.CategoryCrystalOscillator:  indexByKey(crystalOscillatorDefs),
+	domain.CategoryFuse:               indexByKey(fuseDefs),
+	domain.CategoryBattery:            indexByKey(batteryDefs),
+	domain.CategorySensor:             indexByKey(sensorDefs),
+	domain.CategoryModule:             indexByKey(moduleDefs),
 }
 
 var requirementCanonical = map[domain.Category]map[string]domain.AttributeDefinition{
-	domain.CategoryResistor:          indexByKey(append(sharedRequirementDefs(domain.CategoryResistor), resistorDefs...)),
-	domain.CategoryCapacitor:         indexByKey(append(sharedRequirementDefs(domain.CategoryCapacitor), capacitorDefs...)),
-	domain.CategoryInductor:          indexByKey(append(sharedRequirementDefs(domain.CategoryInductor), inductorDefs...)),
-	domain.CategoryIntegratedCircuit: indexByKey(append(sharedRequirementDefs(domain.CategoryIntegratedCircuit), integratedCircuitRequirementDefs...)),
+	domain.CategoryResistor:           indexByKey(append(sharedRequirementDefs(domain.CategoryResistor), resistorDefs...)),
+	domain.CategoryCapacitor:          indexByKey(append(sharedRequirementDefs(domain.CategoryCapacitor), capacitorDefs...)),
+	domain.CategoryInductor:           indexByKey(append(sharedRequirementDefs(domain.CategoryInductor), inductorDefs...)),
+	domain.CategoryIntegratedCircuit:  indexByKey(append(sharedRequirementDefs(domain.CategoryIntegratedCircuit), integratedCircuitRequirementDefs...)),
+	domain.CategoryFerriteBead:        indexByKey(append(sharedRequirementDefs(domain.CategoryFerriteBead), ferriteBeadDefs...)),
+	domain.CategoryDiode:              indexByKey(append(sharedRequirementDefs(domain.CategoryDiode), diodeDefs...)),
+	domain.CategoryLED:                indexByKey(append(sharedRequirementDefs(domain.CategoryLED), ledDefs...)),
+	domain.CategoryTransistorBJT:      indexByKey(append(sharedRequirementDefs(domain.CategoryTransistorBJT), transistorBJTDefs...)),
+	domain.CategoryTransistorMOSFET:   indexByKey(append(sharedRequirementDefs(domain.CategoryTransistorMOSFET), transistorMOSFETDefs...)),
+	domain.CategoryRegulatorLinear:    indexByKey(append(sharedRequirementDefs(domain.CategoryRegulatorLinear), regulatorLinearDefs...)),
+	domain.CategoryRegulatorSwitching: indexByKey(append(sharedRequirementDefs(domain.CategoryRegulatorSwitching), regulatorSwitchingDefs...)),
+	domain.CategoryConnector:          indexByKey(append(sharedRequirementDefs(domain.CategoryConnector), connectorDefs...)),
+	domain.CategorySwitch:             indexByKey(append(sharedRequirementDefs(domain.CategorySwitch), switchDefs...)),
+	domain.CategoryCrystalOscillator:  indexByKey(append(sharedRequirementDefs(domain.CategoryCrystalOscillator), crystalOscillatorDefs...)),
+	domain.CategoryFuse:               indexByKey(append(sharedRequirementDefs(domain.CategoryFuse), fuseDefs...)),
+	domain.CategoryBattery:            indexByKey(append(sharedRequirementDefs(domain.CategoryBattery), batteryDefs...)),
+	domain.CategorySensor:             indexByKey(append(sharedRequirementDefs(domain.CategorySensor), sensorDefs...)),
+	domain.CategoryModule:             indexByKey(append(sharedRequirementDefs(domain.CategoryModule), moduleDefs...)),
 }
 
 func Categories() []domain.Category {

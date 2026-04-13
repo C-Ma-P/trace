@@ -32,7 +32,6 @@ func (s *Service) resolveSourcingCoordinator(ctx context.Context) (*sourcing.Coo
 	return nil, fmt.Errorf("sourcing not configured")
 }
 
-// SourcingProviders returns metadata about each configured sourcing provider.
 func (s *Service) SourcingProviders(ctx context.Context) ([]sourcing.ProviderInfo, error) {
 	coord, err := s.resolveSourcingCoordinator(ctx)
 	if err != nil {
@@ -41,7 +40,6 @@ func (s *Service) SourcingProviders(ctx context.Context) ([]sourcing.ProviderInf
 	return coord.Providers(), nil
 }
 
-// SourceRequirementFromProvider searches a single named provider for the given requirement.
 func (s *Service) SourceRequirementFromProvider(ctx context.Context, requirementID, providerName string) (sourcing.SourceResult, error) {
 	requirement, err := s.projects.GetRequirement(ctx, requirementID)
 	if err != nil {
@@ -81,26 +79,12 @@ func (s *Service) ResolveComponentFromOffer(ctx context.Context, offer sourcing.
 		}
 	}
 	return s.CreateComponent(ctx, domain.Component{
-		Category:     categoryFromCatalog(offer.Raw["parentCatalog"]),
+		Category:     sourcing.MapOfferCategory(offer),
 		MPN:          offer.MPN,
 		Manufacturer: offer.Manufacturer,
 		Package:      offer.Package,
 		Description:  offer.Description,
 	})
-}
-
-func categoryFromCatalog(parentCatalog string) domain.Category {
-	lower := strings.ToLower(parentCatalog)
-	switch {
-	case strings.Contains(lower, "resistor"):
-		return domain.CategoryResistor
-	case strings.Contains(lower, "capacitor"):
-		return domain.CategoryCapacitor
-	case strings.Contains(lower, "inductor") || strings.Contains(lower, "coil"):
-		return domain.CategoryInductor
-	default:
-		return domain.CategoryIntegratedCircuit
-	}
 }
 
 func (s *Service) SourceRequirement(ctx context.Context, requirementID string) (sourcing.SourceResult, error) {

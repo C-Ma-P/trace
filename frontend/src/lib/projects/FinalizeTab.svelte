@@ -5,6 +5,7 @@
     removePartCandidate,
     demotePreferredCandidate,
     importProviderCandidate,
+    exportProjectKiCad,
     categoryDisplayName,
     type Project,
     type ProjectPlan,
@@ -27,6 +28,8 @@
   let error = $state('');
   let expandedReqs = $state<Set<string>>(new Set());
   let actionInProgress = $state<Record<string, boolean>>({});
+  let exportingKiCad = $state(false);
+  let exportWarnings = $state<string[]>([]);
 
   $effect(() => {
     if (project) {
@@ -39,7 +42,6 @@
     error = '';
     try {
       plan = await planProject(project.id);
-      // Auto-expand requirements that need attention
       if (plan) {
         const next = new Set<string>();
         for (const rp of plan.requirements) {
@@ -48,7 +50,6 @@
             next.add(rp.requirement.id);
           }
         }
-        // On first load, expand those needing attention; after that, keep user's choice
         if (expandedReqs.size === 0 && next.size > 0) {
           expandedReqs = next;
         }
@@ -70,7 +71,6 @@
     expandedReqs = next;
   }
 
-  // ---- Readiness summary ----
 
   interface ReadinessSummary {
     total: number;
@@ -106,7 +106,6 @@
     return { total, ready, missingPreferred, providerNotImported, missingSymbol, missingFootprint };
   }
 
-  // ---- Per-requirement status ----
 
   interface ReqStatus {
     level: 'ok' | 'warn' | 'danger';
@@ -122,7 +121,6 @@
     return { level, warnings: readiness.blockers ?? [] };
   }
 
-  // ---- Actions ----
 
   async function handlePromoteCandidate(requirementId: string, candidateId: string) {
     const key = `promote-${candidateId}`;
@@ -198,6 +196,31 @@
     }
   }
 
+  async function handleExportKiCad() {
+    if (exportingKiCad) return;
+    exportingKiCad = true;
+    error = '';
+    exportWarnings = [];
+    try {
+      const result = await exportProjectKiCad(project.id);
+      exportWarnings = result.warnings ?? [];
+      const bytes = Uint8Array.from(atob(result.zipBase64), c => c.charCodeAt(0));
+      const blob = new Blob([bytes], { type: 'application/zip' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = result.filename || 'kicad_export.zip';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      error = e?.message ?? String(e);
+    } finally {
+      exportingKiCad = false;
+    }
+  }
+
   function openComponent(componentId: string | null) {
     if (!componentId) return;
     const params = new URLSearchParams(window.location.search);
@@ -209,7 +232,6 @@
     window.location.href = `${window.location.pathname}?${params.toString()}`;
   }
 
-  // ---- Helpers ----
 
   function formatPrice(offer: SavedSupplierOffer): string {
     if (offer.unitPrice === null) return '—';
@@ -287,7 +309,6 @@
   {:else if plan && plan.requirements.length === 0}
     <div class="empty-msg">No requirements defined. Add requirements in the Requirements tab first.</div>
   {:else if plan}
-    <!-- Project Readiness Summary -->
     {@const readiness = computeReadiness(plan.requirements)}
     <div class="readiness-summary">
       <div class="readiness-row">
@@ -317,14 +338,29 @@
         </div>
       </div>
 
-      <!-- Future export actions -->
       <div class="future-actions">
         <button class="btn btn-secondary btn-sm" disabled title="Coming soon: Export BOM from finalized requirements">Export BOM</button>
-        <button class="btn btn-secondary btn-sm" disabled title="Coming soon: Generate KiCad project">KiCad Project</button>
+        <button
+          class="btn btn-primary btn-sm"
+          onclick={handleExportKiCad}
+          disabled={exportingKiCad || readiness.ready === 0}
+          title={readiness.ready === 0 ? 'No export-ready requirements (symbol + footprint required)' : 'Export KiCad project zip'}
+        >
+          {exportingKiCad ? 'Exporting…' : 'KiCad Project'}
+        </button>
       </div>
+      {#if exportWarnings.length > 0}
+        <div class="export-warnings">
+          <strong>Exported with warnings:</strong>
+          <ul>
+            {#each exportWarnings as w}
+              <li>{w}</li>
+            {/each}
+          </ul>
+        </div>
+      {/if}
     </div>
 
-    <!-- Per-requirement list -->
     <div class="req-list">
       {#each plan.requirements as rp}
         {@const status = reqStatus(rp)}
@@ -332,7 +368,6 @@
         {@const alternates = alternateCandidates(rp)}
 
         <div class="req-card" class:req-card-ok={status.level === 'ok'} class:req-card-warn={status.level === 'warn'} class:req-card-danger={status.level === 'danger'}>
-          <!-- Header row: always visible -->
           <button class="req-card-header" onclick={() => toggleExpand(rp.requirement.id)}>
             <div class="req-header-left">
               <span class="status-dot status-dot-{status.level}" title={status.warnings.join('; ') || 'OK'}>{statusIcon(status.level)}</span>
@@ -353,7 +388,6 @@
             </div>
           </button>
 
-          <!-- Warnings strip -->
           {#if status.warnings.length > 0}
             <div class="warnings-strip">
               {#each status.warnings as w}
@@ -364,7 +398,6 @@
 
           {#if expandedReqs.has(rp.requirement.id)}
             <div class="req-expanded">
-              <!-- Preferred Candidate Section -->
               <section class="finalize-section">
                 <div class="subsection-header">
                   <h4>Preferred Part</h4>
@@ -496,7 +529,6 @@
                 {/if}
               </section>
 
-              <!-- Alternate Candidates Section -->
               <section class="finalize-section">
                 <div class="subsection-header">
                   <h4>Alternate Candidates</h4>

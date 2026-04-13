@@ -53,7 +53,21 @@ func (a *App) GetCategories() []CategoryInfo {
 		{Value: string(domain.CategoryResistor), DisplayName: "Resistor"},
 		{Value: string(domain.CategoryCapacitor), DisplayName: "Capacitor"},
 		{Value: string(domain.CategoryInductor), DisplayName: "Inductor"},
-		{Value: string(domain.CategoryIntegratedCircuit), DisplayName: "Integrated Circuit"},
+		{Value: string(domain.CategoryFerriteBead), DisplayName: "Ferrite Bead"},
+		{Value: string(domain.CategoryDiode), DisplayName: "Diode"},
+		{Value: string(domain.CategoryLED), DisplayName: "LED"},
+		{Value: string(domain.CategoryTransistorBJT), DisplayName: "BJT"},
+		{Value: string(domain.CategoryTransistorMOSFET), DisplayName: "MOSFET"},
+		{Value: string(domain.CategoryRegulatorLinear), DisplayName: "Linear Regulator"},
+		{Value: string(domain.CategoryRegulatorSwitching), DisplayName: "Switching Regulator"},
+		{Value: string(domain.CategoryIntegratedCircuit), DisplayName: "IC"},
+		{Value: string(domain.CategoryConnector), DisplayName: "Connector"},
+		{Value: string(domain.CategorySwitch), DisplayName: "Switch"},
+		{Value: string(domain.CategoryCrystalOscillator), DisplayName: "Crystal / Osc."},
+		{Value: string(domain.CategoryFuse), DisplayName: "Fuse"},
+		{Value: string(domain.CategoryBattery), DisplayName: "Battery"},
+		{Value: string(domain.CategorySensor), DisplayName: "Sensor"},
+		{Value: string(domain.CategoryModule), DisplayName: "Module"},
 	}
 }
 
