@@ -47,8 +47,9 @@ func convertSymbol(ps *parsedSymbol, lcscID string) (string, error) {
 
 	var b strings.Builder
 	b.WriteString("(kicad_symbol_lib\n")
-	b.WriteString("  (version 20220914)\n")
+	b.WriteString("  (version 20241209)\n")
 	b.WriteString("  (generator \"trace-easyeda-import\")\n")
+	b.WriteString("  (generator_version \"9.0\")\n")
 
 	// Symbol definition
 	fmt.Fprintf(&b, "  (symbol %q\n", name)

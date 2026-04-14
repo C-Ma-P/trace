@@ -9,8 +9,9 @@ import (
 	"github.com/C-Ma-P/trace/internal/kicad/sexpr"
 )
 
-const libVersion = "20220914"
+const libVersion = "20241209"
 const libGenerator = "trace-export"
+const libGeneratorVersion = "9.0"
 
 type entry struct {
 	localKey string
@@ -99,6 +100,7 @@ func (l *Library) WriteTo(w io.Writer) error {
 	out.Enter("kicad_symbol_lib")
 	out.Line(fmt.Sprintf("(version %s)", libVersion))
 	out.Line(fmt.Sprintf("(generator %s)", sexpr.Q(libGenerator)))
+	out.Line(fmt.Sprintf("(generator_version %s)", sexpr.Q(libGeneratorVersion)))
 
 	for _, e := range l.entries {
 

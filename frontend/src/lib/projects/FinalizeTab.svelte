@@ -5,7 +5,7 @@
     removePartCandidate,
     demotePreferredCandidate,
     importProviderCandidate,
-    exportProjectKiCad,
+    exportProjectKiCadToDir,
     categoryDisplayName,
     type Project,
     type ProjectPlan,
@@ -15,6 +15,7 @@
     type SavedSupplierOffer,
     type ExportReadinessStatus,
   } from '../backend';
+  import { pickDirectory } from '../windowService';
   import { Browser } from '@wailsio/runtime';
 
   let { project, categories = [], onupdated }: {
@@ -28,8 +29,19 @@
   let error = $state('');
   let expandedReqs = $state<Set<string>>(new Set());
   let actionInProgress = $state<Record<string, boolean>>({});
+
+  // Export dropdown state
+  let exportDropdownOpen = $state(false);
+
+  function closeExportDropdown() {
+    exportDropdownOpen = false;
+  }
+
+  // KiCad export modal state
+  let showKiCadModal = $state(false);
+  let kicadExportDir = $state('');
   let exportingKiCad = $state(false);
-  let exportWarnings = $state<string[]>([]);
+  let kicadModalError = $state('');
 
   $effect(() => {
     if (project) {
@@ -196,29 +208,31 @@
     }
   }
 
-  async function handleExportKiCad() {
-    if (exportingKiCad) return;
+  async function handlePickKiCadDir() {
+    const selected = (await pickDirectory(kicadExportDir)).trim();
+    if (selected) {
+      kicadExportDir = selected;
+    }
+  }
+
+  async function handleConfirmKiCadExport() {
+    if (exportingKiCad || !kicadExportDir) return;
     exportingKiCad = true;
-    error = '';
-    exportWarnings = [];
+    kicadModalError = '';
     try {
-      const result = await exportProjectKiCad(project.id);
-      exportWarnings = result.warnings ?? [];
-      const bytes = Uint8Array.from(atob(result.zipBase64), c => c.charCodeAt(0));
-      const blob = new Blob([bytes], { type: 'application/zip' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = result.filename || 'kicad_export.zip';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      await exportProjectKiCadToDir(project.id, kicadExportDir);
+      showKiCadModal = false;
+      kicadExportDir = '';
     } catch (e: any) {
-      error = e?.message ?? String(e);
+      kicadModalError = e?.message ?? String(e);
     } finally {
       exportingKiCad = false;
     }
+  }
+
+  function openKiCadExportModal() {
+    kicadModalError = '';
+    showKiCadModal = true;
   }
 
   function openComponent(componentId: string | null) {
@@ -339,26 +353,41 @@
       </div>
 
       <div class="future-actions">
-        <button class="btn btn-secondary btn-sm" disabled title="Coming soon: Export BOM from finalized requirements">Export BOM</button>
-        <button
-          class="btn btn-primary btn-sm"
-          onclick={handleExportKiCad}
-          disabled={exportingKiCad || readiness.ready === 0}
-          title={readiness.ready === 0 ? 'No export-ready requirements (symbol + footprint required)' : 'Export KiCad project zip'}
-        >
-          {exportingKiCad ? 'Exporting…' : 'KiCad Project'}
-        </button>
-      </div>
-      {#if exportWarnings.length > 0}
-        <div class="export-warnings">
-          <strong>Exported with warnings:</strong>
-          <ul>
-            {#each exportWarnings as w}
-              <li>{w}</li>
-            {/each}
-          </ul>
+        <!-- Export dropdown (click to open) -->
+        {#if exportDropdownOpen}
+          <div class="dropdown-backdrop" role="presentation" onclick={closeExportDropdown}></div>
+        {/if}
+        <div class="export-dropdown">
+          <button
+            class="btn btn-primary btn-sm export-trigger"
+            type="button"
+            onclick={() => (exportDropdownOpen = !exportDropdownOpen)}
+            aria-haspopup="true"
+            aria-expanded={exportDropdownOpen}
+          >
+            Export
+            <svg viewBox="0 0 16 16" fill="currentColor" class="dropdown-caret" aria-hidden="true">
+              <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          {#if exportDropdownOpen}
+            <div class="export-menu">
+              <button class="export-menu-item" type="button" disabled title="Coming soon">
+                Export BOM
+              </button>
+              <button
+                class="export-menu-item"
+                type="button"
+                disabled={readiness.ready === 0}
+                title={readiness.ready === 0 ? 'No export-ready requirements (symbol + footprint required)' : 'Export KiCad project to a folder'}
+                onclick={() => { closeExportDropdown(); openKiCadExportModal(); }}
+              >
+                KiCad Project
+              </button>
+            </div>
+          {/if}
         </div>
-      {/if}
+      </div>
     </div>
 
     <div class="req-list">
@@ -633,6 +662,49 @@
   {/if}
 </div>
 
+{#if showKiCadModal}
+  <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="kicad-modal-title">
+    <div class="modal-box">
+      <h3 class="modal-title" id="kicad-modal-title">Export KiCad Project</h3>
+      <p class="modal-desc">Choose a folder where the KiCad project zip will be saved.</p>
+      <div class="modal-dir-row">
+        <input
+          class="modal-dir-input"
+          type="text"
+          placeholder="No folder selected"
+          readonly
+          value={kicadExportDir}
+          aria-label="Destination folder"
+        />
+        <button class="btn btn-secondary btn-sm" type="button" onclick={handlePickKiCadDir} disabled={exportingKiCad}>
+          Browse…
+        </button>
+      </div>
+      {#if kicadModalError}
+        <div class="modal-error">{kicadModalError}</div>
+      {/if}
+      <div class="modal-actions">
+        <button
+          class="btn btn-ghost btn-sm"
+          type="button"
+          onclick={() => { showKiCadModal = false; kicadExportDir = ''; kicadModalError = ''; }}
+          disabled={exportingKiCad}
+        >
+          Cancel
+        </button>
+        <button
+          class="btn btn-primary btn-sm"
+          type="button"
+          onclick={handleConfirmKiCadExport}
+          disabled={exportingKiCad || !kicadExportDir}
+        >
+          {exportingKiCad ? 'Exporting…' : 'Export'}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
 <style>
   .finalize-tab {
     padding: 20px;
@@ -705,6 +777,120 @@
     display: flex;
     gap: 8px;
     flex-shrink: 0;
+  }
+
+  /* ---- Export dropdown ---- */
+  .export-dropdown {
+    position: relative;
+    display: inline-flex;
+  }
+  .dropdown-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 99;
+  }
+  .export-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .dropdown-caret {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+  }
+  .export-menu {
+    position: absolute;
+    top: calc(100% + 2px);
+    right: 0;
+    min-width: 148px;
+    background: var(--color-bg-surface);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.32);
+    z-index: 100;
+    overflow: hidden;
+  }
+  .export-menu-item {
+    display: block;
+    width: 100%;
+    padding: 8px 14px;
+    text-align: left;
+    font-size: 13px;
+    color: var(--color-text-primary);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .export-menu-item:hover:not(:disabled) {
+    background: var(--color-bg-hover);
+  }
+  .export-menu-item:disabled {
+    color: var(--color-text-muted);
+    cursor: default;
+  }
+
+  /* ---- KiCad export modal ---- */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+  .modal-box {
+    background: var(--color-bg-surface);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    padding: 24px;
+    min-width: 380px;
+    max-width: 500px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  }
+  .modal-title {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .modal-desc {
+    margin: 0;
+    font-size: 13px;
+    color: var(--color-text-secondary);
+  }
+  .modal-dir-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .modal-dir-input {
+    flex: 1;
+    padding: 6px 10px;
+    font-size: 12px;
+    color: var(--color-text-primary);
+    background: var(--color-bg-muted);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: default;
+    min-width: 0;
+  }
+  .modal-error {
+    font-size: 12px;
+    color: var(--color-danger-text);
+  }
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
   }
 
   /* ---- Requirement List ---- */

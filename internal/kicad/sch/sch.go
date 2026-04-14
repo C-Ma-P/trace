@@ -11,9 +11,10 @@ import (
 )
 
 const (
-	schVersion   = "20230121"
-	schGenerator = "trace-export"
-	libName      = "trace_export"
+	schVersion          = "20250114"
+	schGenerator        = "trace-export"
+	schGeneratorVersion = "9.0"
+	libName             = "trace_export"
 
 	paperSize = "A3"
 )
@@ -23,6 +24,7 @@ func Write(w io.Writer, projectName, schUUID string, parts []kicad.ExportedPart,
 	out.Enter("kicad_sch")
 	out.Line(fmt.Sprintf("(version %s)", schVersion))
 	out.Line(fmt.Sprintf("(generator %s)", sexpr.Q(schGenerator)))
+	out.Line(fmt.Sprintf("(generator_version %s)", sexpr.Q(schGeneratorVersion)))
 	out.Line(fmt.Sprintf("(uuid %s)", sexpr.Q(schUUID)))
 	out.Line(fmt.Sprintf("(paper %s)", sexpr.Q(paperSize)))
 

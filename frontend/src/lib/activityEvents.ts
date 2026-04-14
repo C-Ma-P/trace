@@ -1,6 +1,6 @@
 import { derived, writable } from 'svelte/store';
 
-export type ActivityDomain = 'activity' | 'sourcing' | 'phone' | 'import' | 'asset-probe';
+export type ActivityDomain = 'activity' | 'sourcing' | 'phone' | 'import' | 'asset-probe' | 'export';
 export type ActivitySeverity = 'info' | 'success' | 'warning' | 'error';
 
 export interface ActivityEvent {

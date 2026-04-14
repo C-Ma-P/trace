@@ -17,6 +17,7 @@ const (
 	DomainPhone      Domain = "phone"
 	DomainImport     Domain = "import"
 	DomainAssetProbe Domain = "asset-probe"
+	DomainExport     Domain = "export"
 
 	SeverityInfo    Severity = "info"
 	SeveritySuccess Severity = "success"

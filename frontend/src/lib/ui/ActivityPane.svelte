@@ -5,21 +5,22 @@
   import { type ActivityDomain, type ActivityEvent } from '../activityEvents';
   import { getActivityEvents, getPhoneIntakeInfo } from '../backend';
 
-  type ConsoleDomain = 'activity' | 'sourcing' | 'phone';
+  type ConsoleDomain = 'activity' | 'sourcing' | 'export' | 'phone';
 
   let activeTab: ConsoleDomain = $state('activity');
   let expanded = $state(false);
   let phoneIntakeActive = $state(false);
 
-  let summary = $state({ activity: 0, sourcing: 0, phone: 0, warnings: 0, errors: 0 });
-  let events = $state({ activity: [] as ActivityEvent[], sourcing: [] as ActivityEvent[], phone: [] as ActivityEvent[] });
+  let summary = $state({ activity: 0, sourcing: 0, export: 0, phone: 0, warnings: 0, errors: 0 });
+  let events = $state({ activity: [] as ActivityEvent[], sourcing: [] as ActivityEvent[], export: [] as ActivityEvent[], phone: [] as ActivityEvent[] });
   let expandedEventId = $state<string | null>(null);
-  let unreadCounts = $state({ activity: 0, sourcing: 0, phone: 0 });
+  let unreadCounts = $state({ activity: 0, sourcing: 0, export: 0, phone: 0 });
   let panelContentEl: HTMLDivElement | null = $state(null);
   let isNearBottom = true;
   let lastViewedAt: Record<ConsoleDomain, string> = {
     activity: '',
     sourcing: '',
+    export: '',
     phone: '',
   };
   let refreshTimer: ReturnType<typeof setInterval> | null = null;
@@ -75,6 +76,7 @@
     return {
       activity: 'No structured activity events yet.',
       sourcing: 'No sourcing events are available.',
+      export: 'No export events yet.',
       phone: 'No phone intake events are available.',
     }[domain];
   }
@@ -101,6 +103,15 @@
               const timestamp = new Date(event.timestamp).getTime();
               return lastViewedAt.sourcing
                 ? timestamp > new Date(lastViewedAt.sourcing).getTime()
+                : true;
+            }).length,
+      export:
+        activeTab === 'export' && expanded
+          ? 0
+          : events.export.filter((event: ActivityEvent) => {
+              const timestamp = new Date(event.timestamp).getTime();
+              return lastViewedAt.export
+                ? timestamp > new Date(lastViewedAt.export).getTime()
                 : true;
             }).length,
       phone:
@@ -148,11 +159,13 @@
     events = {
       activity: backendEvents.filter((event) => event.domain === 'activity'),
       sourcing: backendEvents.filter((event) => event.domain === 'sourcing'),
+      export: backendEvents.filter((event) => event.domain === 'export'),
       phone: backendEvents.filter((event) => event.domain === 'phone'),
     };
     summary = {
       activity: events.activity.length,
       sourcing: events.sourcing.length,
+      export: events.export.length,
       phone: events.phone.length,
       warnings: backendEvents.filter((event) => event.severity === 'warning').length,
       errors: backendEvents.filter((event) => event.severity === 'error').length,
@@ -271,6 +284,23 @@
         </svg>
         {#if unreadCounts.sourcing > 0}
           <span class="tab-badge">{unreadCounts.sourcing}</span>
+        {/if}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="dock-tab"
+        class:is-active={activeTab === 'export' && expanded}
+        aria-label="Exports"
+        aria-selected={activeTab === 'export' && expanded}
+        onclick={() => toggleConsole('export')}
+      >
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="tab-icon" aria-hidden="true">
+          <rect x="3" y="11" width="14" height="6" rx="1" />
+          <path d="M10 3v8M7 8l3-3 3 3" />
+        </svg>
+        {#if unreadCounts.export > 0}
+          <span class="tab-badge">{unreadCounts.export}</span>
         {/if}
       </button>
       <button

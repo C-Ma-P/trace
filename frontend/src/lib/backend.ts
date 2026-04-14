@@ -640,6 +640,15 @@ export function exportProjectKiCad(projectId: string): Promise<KiCadExportResult
   return call('ExportProjectKiCad', projectId);
 }
 
+export interface KiCadExportToDirResult {
+  savedPath: string;
+  warnings: string[];
+}
+
+export function exportProjectKiCadToDir(projectId: string, destDir: string): Promise<KiCadExportToDirResult> {
+  return call('ExportProjectKiCadToDir', projectId, destDir);
+}
+
 export function sourceRequirement(requirementId: string): Promise<SourceRequirementResult> {
   return call('SourceRequirement', requirementId);
 }

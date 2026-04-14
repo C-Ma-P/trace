@@ -504,6 +504,11 @@ type KiCadExportResponse struct {
 	Warnings  []string `json:"warnings"`
 }
 
+type KiCadExportToDirResult struct {
+	SavedPath string   `json:"savedPath"`
+	Warnings  []string `json:"warnings"`
+}
+
 type PartCandidateResponse struct {
 	ID            string                      `json:"id"`
 	ProjectID     string                      `json:"projectId"`

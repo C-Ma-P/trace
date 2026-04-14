@@ -233,6 +233,14 @@ func BlockName(toks []Tok) string {
 }
 
 func RenameSymbolBlock(toks []Tok, oldName, newName string) []Tok {
+	// KiCad requires sub-symbol names to use the unprefixed symbol name.
+	// When newName is "lib:Name", sub-symbols must be "Name_0_1", not
+	// "lib:Name_0_1".
+	subPrefix := newName
+	if idx := strings.LastIndex(newName, ":"); idx >= 0 {
+		subPrefix = newName[idx+1:]
+	}
+
 	result := make([]Tok, len(toks))
 	copy(result, toks)
 	for i, t := range result {
@@ -243,7 +251,7 @@ func RenameSymbolBlock(toks []Tok, oldName, newName string) []Tok {
 			result[i].Val = newName
 		} else if isSubSymbolName(t.Val, oldName) {
 			suffix := t.Val[len(oldName):]
-			result[i].Val = newName + suffix
+			result[i].Val = subPrefix + suffix
 		}
 	}
 	return result

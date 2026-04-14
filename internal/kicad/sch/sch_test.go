@@ -83,7 +83,8 @@ func TestWrite_ValidSchematic(t *testing.T) {
 	got := buf.String()
 
 	mustContain(t, got, "kicad_sch")
-	mustContain(t, got, "20230121")
+	mustContain(t, got, "20250114")
+	mustContain(t, got, "generator_version")
 	mustContain(t, got, "trace-export")
 	mustContain(t, got, "A3")
 

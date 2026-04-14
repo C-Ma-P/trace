@@ -96,8 +96,8 @@ func parseSymbolPin(line string, bbox eeSymbolBbox) (eeSymbolPin, error) {
 
 	// Segment 0: settings (tilde-separated, first element is "P")
 	settingFields := strings.Split(segments[0], "~")
-	if len(settingFields) < 10 {
-		return eeSymbolPin{}, fmt.Errorf("pin settings: expected >=10 fields, got %d", len(settingFields))
+	if len(settingFields) < 7 {
+		return eeSymbolPin{}, fmt.Errorf("pin settings: expected >=7 fields, got %d", len(settingFields))
 	}
 
 	// Fields from settings (after "P"): is_displayed, type, spice_pin_number,

@@ -171,11 +171,14 @@ func TestRenameSymbolBlock(t *testing.T) {
 	if !strings.Contains(serialised, `"trace_export:TestPart"`) {
 		t.Error("renamed block should contain trace_export:TestPart")
 	}
-	if !strings.Contains(serialised, `"trace_export:TestPart_0_1"`) {
-		t.Error("renamed block should contain sub-symbol trace_export:TestPart_0_1")
+	if !strings.Contains(serialised, `"TestPart_0_1"`) {
+		t.Error("renamed block should contain sub-symbol TestPart_0_1 (unprefixed)")
 	}
-	if !strings.Contains(serialised, `"trace_export:TestPart_1_1"`) {
-		t.Error("renamed block should contain sub-symbol trace_export:TestPart_1_1")
+	if !strings.Contains(serialised, `"TestPart_1_1"`) {
+		t.Error("renamed block should contain sub-symbol TestPart_1_1 (unprefixed)")
+	}
+	if strings.Contains(serialised, `"trace_export:TestPart_0_1"`) {
+		t.Error("sub-symbol should NOT have library prefix")
 	}
 
 	if strings.Contains(serialised, `"TestPart"`) {
