@@ -86,7 +86,13 @@
       selectedReqIndex = null;
       onupdated?.();
     } catch (e: any) {
-      error = e?.message ?? String(e);
+      // Parse Wails error JSON to extract a human-readable message
+      try {
+        const parsed = JSON.parse(e?.message ?? String(e));
+        error = (parsed.message as string) ?? String(e);
+      } catch {
+        error = e?.message ?? String(e);
+      }
     } finally {
       saving = false;
     }

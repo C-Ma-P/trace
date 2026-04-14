@@ -15,6 +15,12 @@
   let events = $state({ activity: [] as ActivityEvent[], sourcing: [] as ActivityEvent[], export: [] as ActivityEvent[], phone: [] as ActivityEvent[] });
   let expandedEventId = $state<string | null>(null);
   let unreadCounts = $state({ activity: 0, sourcing: 0, export: 0, phone: 0 });
+  let hasErrors = $derived({
+    activity: events.activity.some((e: ActivityEvent) => e.severity === 'error'),
+    sourcing: events.sourcing.some((e: ActivityEvent) => e.severity === 'error'),
+    export: events.export.some((e: ActivityEvent) => e.severity === 'error'),
+    phone: events.phone.some((e: ActivityEvent) => e.severity === 'error'),
+  });
   let panelContentEl: HTMLDivElement | null = $state(null);
   let isNearBottom = true;
   let lastViewedAt: Record<ConsoleDomain, string> = {
@@ -258,6 +264,7 @@
         role="tab"
         class="dock-tab"
         class:is-active={activeTab === 'activity' && expanded}
+        class:has-error={hasErrors.activity}
         aria-label="Activity"
         aria-selected={activeTab === 'activity' && expanded}
         onclick={() => toggleConsole('activity')}
@@ -274,6 +281,7 @@
         role="tab"
         class="dock-tab"
         class:is-active={activeTab === 'sourcing' && expanded}
+        class:has-error={hasErrors.sourcing}
         aria-label="Sourcing"
         aria-selected={activeTab === 'sourcing' && expanded}
         onclick={() => toggleConsole('sourcing')}
@@ -291,6 +299,7 @@
         role="tab"
         class="dock-tab"
         class:is-active={activeTab === 'export' && expanded}
+        class:has-error={hasErrors.export}
         aria-label="Exports"
         aria-selected={activeTab === 'export' && expanded}
         onclick={() => toggleConsole('export')}
@@ -455,6 +464,16 @@
   .dock-tab.phone-active.is-active {
     color: var(--color-success-text);
     border-top-color: var(--color-success);
+  }
+
+  /* Error state tab coloring — persists until errors are cleared from the log */
+  .dock-tab.has-error {
+    color: var(--color-danger);
+  }
+
+  .dock-tab.has-error.is-active {
+    color: var(--color-danger-text);
+    border-top-color: var(--color-danger);
   }
 
   /* ── Tab icon ────────────────────────────────────────────────── */

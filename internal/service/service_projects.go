@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/C-Ma-P/trace/internal/domain"
@@ -411,7 +412,7 @@ func matchesMetadataConstraint(component domain.Component, constraint domain.Req
 		return false, false
 	}
 
-	return actual == *constraint.Text, true
+	return strings.EqualFold(strings.TrimSpace(actual), strings.TrimSpace(*constraint.Text)), true
 }
 
 func valueMatches(attribute domain.AttributeValue, constraint domain.RequirementConstraint) bool {

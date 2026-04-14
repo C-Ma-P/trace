@@ -259,7 +259,11 @@ func (a *App) ReplaceProjectRequirements(projectID string, reqs []RequirementInp
 		}
 		domainReqs[i] = requirementInputToDomain(r, constraints)
 	}
-	return a.svc.ReplaceProjectRequirements(context.Background(), projectID, domainReqs)
+	if err := a.svc.ReplaceProjectRequirements(context.Background(), projectID, domainReqs); err != nil {
+		a.emitActivityError("requirement-save", err.Error())
+		return err
+	}
+	return nil
 }
 
 func (a *App) PlanProject(projectID string) (ProjectPlanResponse, error) {
