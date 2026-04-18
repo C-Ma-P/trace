@@ -76,5 +76,6 @@ Trace will skip unconfigured providers. Optional environment variables:
 
 ## Notes For Contributors
 
-- `go.mod` currently contains local `replace` directives for Wails and `go-easyeda`. Update those paths if your local environment differs.
+- `go.mod` uses `github.com/C-Ma-P/go-easyeda` `v1.0.0` and replaces Wails with the private fork at `github.com/C-Ma-P/wails/v3`.
+- CI needs a `PRIVATE_MODULES_TOKEN` secret with read access to `github.com/C-Ma-P/wails` so GitHub Actions can fetch the private module.
 - Scratch notes and backlog items live in `docs/` instead of the repository root.

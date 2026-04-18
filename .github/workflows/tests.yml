@@ -1,0 +1,75 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Frontend build
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+  go:
+    name: Go tests
+    runs-on: ubuntu-latest
+    env:
+      GOPRIVATE: github.com/C-Ma-P/*
+      GONOSUMDB: github.com/C-Ma-P/*
+      GOPROXY: direct
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Require private modules token
+        env:
+          PRIVATE_MODULES_TOKEN: ${{ secrets.PRIVATE_MODULES_TOKEN }}
+        run: |
+          if [ -z "$PRIVATE_MODULES_TOKEN" ]; then
+            echo "PRIVATE_MODULES_TOKEN is required to fetch github.com/C-Ma-P/wails."
+            exit 1
+          fi
+
+      - name: Configure private module access
+        env:
+          PRIVATE_MODULES_TOKEN: ${{ secrets.PRIVATE_MODULES_TOKEN }}
+        run: |
+          git config --global url."https://x-access-token:${PRIVATE_MODULES_TOKEN}@github.com/".insteadOf "https://github.com/"
+
+      - name: Download Go modules
+        run: go mod download
+
+      - name: Run Go tests
+        run: go test ./...

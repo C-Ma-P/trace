@@ -3,7 +3,7 @@ module github.com/C-Ma-P/trace
 go 1.26.1
 
 require (
-	github.com/C-Ma-P/go-easyeda v0.0.0
+	github.com/C-Ma-P/go-easyeda v1.0.0
 	github.com/PatrickWalther/go-digikey v1.1.0
 	github.com/PatrickWalther/go-lcsc v1.0.0
 	github.com/PatrickWalther/go-mouser v1.1.0
@@ -18,9 +18,7 @@ require (
 	golang.org/x/sync v0.19.0
 )
 
-replace github.com/wailsapp/wails/v3 => /home/meet/dev/wails-patch
-
-replace github.com/C-Ma-P/go-easyeda => /home/meet/dev/go-easyeda
+replace github.com/wailsapp/wails/v3 => github.com/C-Ma-P/wails/v3 v3.0.0-20260418212601-e75bad78fff2
 
 require (
 	dario.cat/mergo v1.0.2 // indirect

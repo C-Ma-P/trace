@@ -6,7 +6,6 @@
 *.so
 *.so.*
 *.dylib
-go.sum
 vendor/
 dist/
 
@@ -27,6 +26,7 @@ dist/
 
 # Frontend build artifacts
 frontend/wailsjs/
+frontend/dist/
 
 # Vite
 .vite/
