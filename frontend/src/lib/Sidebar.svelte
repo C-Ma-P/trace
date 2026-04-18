@@ -104,7 +104,12 @@
     font-size: 13px;
     font-weight: 500;
     text-align: left;
-    transition: background 0.1s, color 0.1s;
+    transition:
+      background var(--motion-fast) var(--easing-standard),
+      color var(--motion-fast) var(--easing-standard),
+      transform var(--motion-fast) var(--easing-standard),
+      box-shadow var(--motion-fast) var(--easing-standard);
+    transform: translateX(0);
     white-space: nowrap;
     overflow: hidden;
   }
@@ -115,6 +120,11 @@
   .nav-item:hover {
     background: var(--color-bg-sidebar-hover);
     color: var(--color-text-primary);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .nav-item:hover {
+      transform: translateX(1px);
+    }
   }
   .nav-item.active {
     background: var(--color-bg-sidebar-active);
@@ -148,15 +158,27 @@
     height: 28px;
     border-radius: var(--radius-md);
     color: var(--color-text-muted);
-    transition: color 0.12s, background 0.12s;
+    transition:
+      color var(--motion-fast) var(--easing-standard),
+      background var(--motion-fast) var(--easing-standard),
+      transform var(--motion-fast) var(--easing-standard);
+    transform: scale(1);
   }
   .collapse-btn:hover {
     color: var(--color-text-primary);
     background: var(--color-bg-sidebar-hover);
   }
+  @media (prefers-reduced-motion: no-preference) {
+    .collapse-btn:hover {
+      transform: scale(1.04);
+    }
+    .collapse-btn:active {
+      transform: scale(0.98);
+    }
+  }
   .collapse-icon {
     display: block;
-    transition: transform 0.3s ease;
+    transition: transform var(--motion-slow) var(--easing-standard);
   }
   .collapse-icon.flipped {
     transform: rotate(180deg);

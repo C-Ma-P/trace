@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import type { Snippet } from 'svelte';
+  import { fade, scale } from 'svelte/transition';
 
   let { open = false, title = '', width = '480px', onclose, children }: {
     open?: boolean;
@@ -16,6 +18,23 @@
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') onclose?.();
   }
+
+  const MODAL_FADE_DURATION_MS = 120;
+  const MODAL_SCALE_DURATION_MS = 180;
+  const MODAL_SCALE_START = 0.97;
+
+  let reducedMotion = $state(false);
+
+  onMount(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    reducedMotion = mq.matches;
+
+    const handleReducedMotionChange = (event: MediaQueryListEvent) => {
+      reducedMotion = event.matches;
+    };
+    mq.addEventListener('change', handleReducedMotionChange);
+    return () => mq.removeEventListener('change', handleReducedMotionChange);
+  });
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -23,8 +42,20 @@
 {#if open}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="modal-backdrop" onclick={handleBackdrop}>
-    <div class="modal-content" style="max-width: {width}" onclick={(e) => e.stopPropagation()}>
+  <div
+    class="modal-backdrop"
+    onclick={handleBackdrop}
+    transition:fade={{ duration: reducedMotion ? 0 : MODAL_FADE_DURATION_MS }}
+  >
+    <div
+      class="modal-content"
+      style="max-width: {width}"
+      onclick={(e) => e.stopPropagation()}
+      transition:scale={{
+        duration: reducedMotion ? 0 : MODAL_SCALE_DURATION_MS,
+        start: reducedMotion ? 1 : MODAL_SCALE_START,
+      }}
+    >
       <div class="modal-header">
         <h3 class="modal-title">{title}</h3>
         <button class="modal-close" onclick={() => onclose?.()}>✕</button>
@@ -74,6 +105,9 @@
     font-size: 14px;
     padding: 3px 6px;
     border-radius: var(--radius-sm);
+    transition:
+      background var(--motion-fast) var(--easing-standard),
+      color var(--motion-fast) var(--easing-standard);
   }
   .modal-close:hover {
     background: var(--color-bg-hover);
