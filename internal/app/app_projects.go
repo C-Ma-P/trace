@@ -260,7 +260,12 @@ func (a *App) ReplaceProjectRequirements(projectID string, reqs []RequirementInp
 		domainReqs[i] = requirementInputToDomain(r, constraints)
 	}
 	if err := a.svc.ReplaceProjectRequirements(context.Background(), projectID, domainReqs); err != nil {
-		a.emitActivityError("requirement-save", err.Error())
+		msg := err.Error()
+		var catErr domain.ErrCategoryMismatch
+		if errors.As(err, &catErr) {
+			msg = fmt.Sprintf("component category %q does not match requirement category %q", catErr.ComponentCategory, catErr.RequirementCategory)
+		}
+		a.emitActivityError("requirement-save", msg)
 		return err
 	}
 	return nil

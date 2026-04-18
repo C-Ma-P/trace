@@ -90,11 +90,13 @@ func (s *Service) prepareProjectRequirements(ctx context.Context, projectID stri
 					ComponentCategory:   component.Category,
 				}
 			}
+			// Constraint matching is advisory; an explicit resolution from the
+			// user is always trusted. If constraints have been tightened since
+			// the resolution was set, silently clear it so the next planning
+			// cycle can re-match without blocking the save.
 			if _, ok := matchesRequirement(component, requirements[i]); !ok {
-				return nil, domain.ErrRequirementNotSatisfied{
-					ComponentID:   component.ID,
-					RequirementID: requirements[i].ID,
-				}
+				requirements[i].Resolution = nil
+				requirements[i].SelectedComponentID = nil
 			}
 		}
 	}

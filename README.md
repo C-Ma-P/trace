@@ -1,55 +1,80 @@
 # Trace
 
-A desktop app for managing electronic component inventory and project requirements.
+Trace is a desktop app for managing electronic components, supplier data, imported assets, and project requirements.
 
-Built with [Wails v3](https://v3.wails.io) (Go backend) + Svelte frontend, backed by PostgreSQL.
+The app uses a Go backend with Wails v3 and a Svelte frontend. PostgreSQL stores application data, and Trace-managed files live under the local Trace home directory.
 
-## Setup
+## Requirements
 
-**Database:** PostgreSQL required. Default connection: `postgres://meet:changeme@localhost:5432/trace?sslmode=disable` (override with `DATABASE_URL` env var).
+- Go 1.21+
+- Node.js 18+
+- PostgreSQL
+- Wails CLI (`wails3`)
 
-**On Ubuntu:**
+## Quick Start
+
+Default database URL:
+
+```bash
+postgres://meet:changeme@localhost:5432/trace?sslmode=disable
+```
+
+Example PostgreSQL setup on Ubuntu:
+
 ```bash
 sudo systemctl start postgresql
-sudo -u postgres createuser -P meet  # password: changeme
+sudo -u postgres createuser -P meet
 createdb -U meet trace
 ```
-(`createdb` is a PostgreSQL tool; run as your current user)
 
-**Sourcing APIs** (optional, via env vars):
+Install frontend dependencies:
+
+```bash
+cd frontend && npm install
+```
+
+Start the app in development mode:
+
+```bash
+DATABASE_URL=postgres://meet:changeme@localhost:5432/trace?sslmode=disable wails3 dev
+```
+
+Build a production app:
+
+```bash
+wails3 build
+```
+
+Run tests:
+
+```bash
+go test ./...
+```
+
+## Optional Provider Configuration
+
+Trace will skip unconfigured providers. Optional environment variables:
+
 - `DIGIKEY_CLIENT_ID`, `DIGIKEY_CLIENT_SECRET`
 - `DIGIKEY_CUSTOMER_ID`, `DIGIKEY_SITE`, `DIGIKEY_LANGUAGE`, `DIGIKEY_CURRENCY`
 - `MOUSER_API_KEY`
 - `LCSC_ENABLED`, `LCSC_CURRENCY`
 
-Unconfigured providers are skipped.
+## Repository Layout
 
+- `main.go`: Wails entry point and dependency wiring.
+- `frontend/`: Svelte 5 + TypeScript + Vite UI.
+- `internal/app/`: Wails bindings and frontend-facing DTOs.
+- `internal/service/`: Core application workflows.
+- `internal/domain/`: Domain models and repository interfaces.
+- `internal/store/postgres/`: PostgreSQL persistence.
+- `internal/ingest/`: File and archive ingestion pipeline.
+- `internal/kicad/`: KiCad import/export and project handling.
+- `cmd/seed/`: Local seed utility.
+- `Taskfile.yml`: Convenience tasks for frontend install/build and Linux builds.
+- `build/config.yml`: Wails dev-mode configuration.
 
-## Development
+## Notes For Contributors
 
-**Requirements:** Go 1.21+, Node.js 18+, Wails CLI, PostgreSQL
-
-**Dev mode:**
-```bash
-DATABASE_URL=postgres://localhost:5432/trace?sslmode=disable wails3 dev
-```
-
-**Build:**
-```bash
-wails3 build
-```
-
-
-## Architecture
-
-```
-main.go                   Wails entry point
-internal/app/            Wails binding layer (frontend ↔ DTOs)
-internal/domain/         Core domain models and repository interfaces
-internal/domain/registry/Canonical attribute definitions per component type
-internal/service/        Business logic (domain-agnostic)
-internal/store/postgres/ PostgreSQL repositories
-frontend/                Svelte 5 + TypeScript + Vite
-```
-
-Domain and service layers are database-agnostic. Postgres-specific code is isolated in `internal/store/postgres/`.
+- `go.mod` currently contains local `replace` directives for Wails and `go-easyeda`. Update those paths if your local environment differs.
+- Scratch notes and backlog items live in `docs/` instead of the repository root.
