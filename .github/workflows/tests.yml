@@ -36,8 +36,15 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+      - name: Upload frontend dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+
   go:
     name: Go tests
+    needs: frontend
     runs-on: ubuntu-latest
     environment: trace
     env:
@@ -48,6 +55,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Download frontend dist
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -60,7 +73,7 @@ jobs:
           PRIVATE_MODULES_TOKEN: ${{ secrets.PRIVATE_MODULES_TOKEN }}
         run: |
           if [ -z "$PRIVATE_MODULES_TOKEN" ]; then
-            echo "PRIVATE_MODULES_TOKEN is required to fetch github.com/C-Ma-P/wails."
+            echo "PRIVATE_MODULES_TOKEN is required to fetch private github.com/C-Ma-P modules."
             exit 1
           fi
 
@@ -68,10 +81,10 @@ jobs:
         env:
           PRIVATE_MODULES_TOKEN: ${{ secrets.PRIVATE_MODULES_TOKEN }}
         run: |
-          git config --global url."https://x-access-token:${PRIVATE_MODULES_TOKEN}@github.com/".insteadOf "https://github.com/"
+          git config --global url."https://x-access-token:${PRIVATE_MODULES_TOKEN}@github.com/C-Ma-P/".insteadOf "https://github.com/C-Ma-P/"
 
       - name: Download Go modules
-        run: go mod download
+        run: go mod download all
 
       - name: Run Go tests
-        run: go test ./...
+        run: go test -mod=mod ./...
