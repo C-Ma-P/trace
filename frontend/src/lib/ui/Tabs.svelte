@@ -26,19 +26,38 @@
     background: var(--color-bg-surface);
   }
   .tab {
+    position: relative;
     padding: 8px 14px;
     font-size: 12px;
     font-weight: 500;
     color: var(--color-text-secondary);
     border-bottom: 2px solid transparent;
     margin-bottom: -1px;
-    transition: color 0.1s, border-color 0.1s;
+    transition:
+      color var(--motion-fast) var(--easing-standard),
+      background var(--motion-fast) var(--easing-standard);
   }
   .tab:hover {
     color: var(--color-text-primary);
+    background: rgba(255, 255, 255, 0.03);
+  }
+  .tab::after {
+    content: '';
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: -2px;
+    height: 2px;
+    border-radius: 999px;
+    background: var(--color-accent);
+    transform: scaleX(0);
+    transform-origin: center;
+    transition: transform var(--motion-normal) var(--easing-standard);
   }
   .tab.active {
     color: var(--color-accent);
-    border-bottom-color: var(--color-accent);
+  }
+  .tab.active::after {
+    transform: scaleX(1);
   }
 </style>

@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import { fade, scale } from 'svelte/transition';
 
   let { open = false, title = '', width = '480px', onclose, children }: {
     open?: boolean;
@@ -23,8 +24,13 @@
 {#if open}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="modal-backdrop" onclick={handleBackdrop}>
-    <div class="modal-content" style="max-width: {width}" onclick={(e) => e.stopPropagation()}>
+  <div class="modal-backdrop" onclick={handleBackdrop} transition:fade={{ duration: 120 }}>
+    <div
+      class="modal-content"
+      style="max-width: {width}"
+      onclick={(e) => e.stopPropagation()}
+      transition:scale={{ duration: 180, start: 0.97 }}
+    >
       <div class="modal-header">
         <h3 class="modal-title">{title}</h3>
         <button class="modal-close" onclick={() => onclose?.()}>✕</button>
@@ -74,6 +80,9 @@
     font-size: 14px;
     padding: 3px 6px;
     border-radius: var(--radius-sm);
+    transition:
+      background var(--motion-fast) var(--easing-standard),
+      color var(--motion-fast) var(--easing-standard);
   }
   .modal-close:hover {
     background: var(--color-bg-hover);
