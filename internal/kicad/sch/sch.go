@@ -14,7 +14,7 @@ const (
 	schVersion          = "20250114"
 	schGenerator        = "trace-export"
 	schGeneratorVersion = "9.0"
-	libName             = "trace_export"
+	libName             = "trace_aexport"
 
 	paperSize = "A3"
 )
