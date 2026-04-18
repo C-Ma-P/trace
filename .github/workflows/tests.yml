@@ -45,7 +45,7 @@ jobs:
   go:
     name: Go tests
     needs: frontend
-    runs-on: ubuntu-latest
+    runs-on: runs-on: [self-hosted, Linux, X64]
     environment: trace
     env:
       GOPRIVATE: github.com/C-Ma-P/*
