@@ -1,6 +1,7 @@
 package launcher
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -49,7 +50,7 @@ func TestStoreTouchProjectCapsUnpinnedProjects(t *testing.T) {
 
 	store := NewStore()
 	for i := 0; i < maxRecentProjects+3; i++ {
-		id := filepath.Base(filepath.Join("project", string(rune('a'+i))))
+		id := fmt.Sprintf("project-%d", i)
 		if err := store.TouchProject(id, "Project", ""); err != nil {
 			t.Fatalf("touch %s: %v", id, err)
 		}
