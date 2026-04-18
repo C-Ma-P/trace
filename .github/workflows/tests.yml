@@ -50,7 +50,7 @@ jobs:
     env:
       GOPRIVATE: github.com/C-Ma-P/*
       GONOSUMDB: github.com/C-Ma-P/*
-      GOPROXY: direct
+      GOPROXY: https://proxy.golang.org,direct
 
     steps:
       - name: Checkout
@@ -84,7 +84,7 @@ jobs:
           git config --global url."https://x-access-token:${PRIVATE_MODULES_TOKEN}@github.com/C-Ma-P/".insteadOf "https://github.com/C-Ma-P/"
 
       - name: Download Go modules
-        run: go mod download all
+        run: go mod download
 
       - name: Run Go tests
         run: go test -mod=mod ./...
