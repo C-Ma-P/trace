@@ -190,7 +190,11 @@
   }
   .list-item:hover {
     background: var(--color-bg-hover);
-    transform: translateX(1px);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .list-item:hover {
+      transform: translateX(1px);
+    }
   }
   .list-item.selected {
     background: var(--color-bg-selected);

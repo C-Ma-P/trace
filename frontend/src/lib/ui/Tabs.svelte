@@ -31,8 +31,6 @@
     font-size: 12px;
     font-weight: 500;
     color: var(--color-text-secondary);
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
     transition:
       color var(--motion-fast) var(--easing-standard),
       background var(--motion-fast) var(--easing-standard);
@@ -52,7 +50,11 @@
     background: var(--color-accent);
     transform: scaleX(0);
     transform-origin: center;
-    transition: transform var(--motion-normal) var(--easing-standard);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .tab::after {
+      transition: transform var(--motion-normal) var(--easing-standard);
+    }
   }
   .tab.active {
     color: var(--color-accent);

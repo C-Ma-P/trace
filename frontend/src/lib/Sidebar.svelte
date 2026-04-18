@@ -120,7 +120,11 @@
   .nav-item:hover {
     background: var(--color-bg-sidebar-hover);
     color: var(--color-text-primary);
-    transform: translateX(1px);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .nav-item:hover {
+      transform: translateX(1px);
+    }
   }
   .nav-item.active {
     background: var(--color-bg-sidebar-active);
@@ -163,10 +167,14 @@
   .collapse-btn:hover {
     color: var(--color-text-primary);
     background: var(--color-bg-sidebar-hover);
-    transform: scale(1.04);
   }
-  .collapse-btn:active {
-    transform: scale(0.98);
+  @media (prefers-reduced-motion: no-preference) {
+    .collapse-btn:hover {
+      transform: scale(1.04);
+    }
+    .collapse-btn:active {
+      transform: scale(0.98);
+    }
   }
   .collapse-icon {
     display: block;

@@ -21,6 +21,8 @@
   --motion-normal: 180ms;
   --motion-slow: 280ms;
   --easing-standard: cubic-bezier(0.2, 0, 0, 1);
+  --focus-ring-width: 2px;
+  --focus-ring-opacity: 14%;
 }
 
 :root[data-theme='dark'] {
@@ -47,6 +49,7 @@
   --color-border:               #2a2e3e;
   --color-border-strong:        #3a3f52;
   --color-border-focus:         #3b82f6;
+  --color-border-focus-soft:    color-mix(in srgb, var(--color-border-focus) var(--focus-ring-opacity), transparent);
 
   /* --- Accent --- */
   --color-accent:               #4c6b8b;
@@ -139,12 +142,14 @@ input, select, textarea {
   color: var(--color-text-primary);
 }
 
-.btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-}
+@media (prefers-reduced-motion: no-preference) {
+  .btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
 
-.btn:active:not(:disabled) {
-  transform: translateY(0);
+  .btn:active:not(:disabled) {
+    transform: translateY(0);
+  }
 }
 
 .btn-primary {
@@ -222,7 +227,7 @@ input, select, textarea {
 
 .form-input:focus {
   border-color: var(--color-border-focus);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.14);
+  box-shadow: 0 0 0 var(--focus-ring-width) var(--color-border-focus-soft);
 }
 
 .form-input::placeholder {
