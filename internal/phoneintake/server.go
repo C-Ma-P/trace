@@ -179,10 +179,12 @@ func (s *Server) IsRunning() bool {
 
 // phoneURLLocked returns the phone access URL. Caller must hold s.mu.
 func (s *Server) phoneURLLocked() string {
-	if s.hostSelection.Source == "override" {
-		return fmt.Sprintf("https://%s:%d/phone/%s", s.hostSelection.Host, s.port, s.token)
+	host := stableHostname
+	switch s.hostSelection.Source {
+	case "auto", "override":
+		host = s.hostSelection.Host
 	}
-	return fmt.Sprintf("https://%s:%d/phone/%s", stableHostname, s.port, s.token)
+	return fmt.Sprintf("https://%s:%d/phone/%s", host, s.port, s.token)
 }
 
 // PhoneURL returns the phone access URL.
