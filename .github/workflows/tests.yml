@@ -15,6 +15,7 @@ jobs:
   runner-check:
     name: Check self-hosted runner
     runs-on: ubuntu-latest
+    environment: trace
     outputs:
       available: ${{ steps.check.outputs.available }}
     steps:
@@ -22,7 +23,7 @@ jobs:
         id: check
         continue-on-error: true
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PRIVATE_MODULES_TOKEN }}
         run: |
           available=$(gh api "repos/${{ github.repository }}/actions/runners" \
             --jq '.runners | map(select(
