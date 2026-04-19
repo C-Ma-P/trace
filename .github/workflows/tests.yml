@@ -9,34 +9,11 @@ on:
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
-  runner-check:
-    name: Check self-hosted runner
-    runs-on: ubuntu-latest
-    environment: trace
-    outputs:
-      available: ${{ steps.check.outputs.available }}
-    steps:
-      - name: Query runner availability
-        id: check
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.PRIVATE_MODULES_TOKEN }}
-        run: |
-          available=$(gh api "repos/${{ github.repository }}/actions/runners" \
-            --jq '.runners | map(select(
-              .status == "online" and
-              (.labels | map(.name) | contains(["self-hosted","Linux","X64"]))
-            )) | length > 0') || available=false
-          echo "available=$available" >> "$GITHUB_OUTPUT"
-
   frontend:
     name: Frontend build
-    needs: runner-check
-    if: always()
-    runs-on: ${{ needs.runner-check.outputs.available == 'true' && fromJSON('["self-hosted","Linux","X64"]') || 'ubuntu-latest' }}
+    runs-on: ${{ vars.USE_SELF_HOSTED == 'true' && fromJSON('["self-hosted","Linux","X64"]') || 'ubuntu-latest' }}
 
     defaults:
       run:
@@ -67,9 +44,8 @@ jobs:
 
   go:
     name: Go tests
-    needs: [runner-check, frontend]
-    if: always() && needs.frontend.result == 'success'
-    runs-on: ${{ needs.runner-check.outputs.available == 'true' && fromJSON('["self-hosted","Linux","X64"]') || 'ubuntu-latest' }}
+    needs: frontend
+    runs-on: ${{ vars.USE_SELF_HOSTED == 'true' && fromJSON('["self-hosted","Linux","X64"]') || 'ubuntu-latest' }}
     environment: trace
     env:
       GOPRIVATE: github.com/C-Ma-P/*
@@ -78,7 +54,7 @@ jobs:
 
     steps:
       - name: Install system dependencies
-        if: needs.runner-check.outputs.available != 'true'
+        if: vars.USE_SELF_HOSTED != 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y libglib2.0-dev libgtk-3-dev libsoup-3.0-dev libwebkit2gtk-4.1-dev
@@ -96,7 +72,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-          cache: ${{ needs.runner-check.outputs.available != 'true' }}
+          cache: ${{ vars.USE_SELF_HOSTED != 'true' }}
 
       - name: Require private modules token
         env:
