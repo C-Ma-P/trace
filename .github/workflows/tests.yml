@@ -11,9 +11,23 @@ permissions:
   contents: read
 
 jobs:
+  runner-check:
+    name: Check self-hosted runner
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 1
+    outputs:
+      available: ${{ steps.check.outputs.available }}
+    steps:
+      - name: Runner is online
+        id: check
+        run: |
+          timeout 10s bash -lc 'echo "available=true" >> "$GITHUB_OUTPUT"'
+
   frontend:
     name: Frontend build
-    runs-on: [self-hosted, Linux, X64]
+    needs: runner-check
+    if: always()
+    runs-on: ${{ needs.runner-check.outputs.available == 'true' && fromJSON('["self-hosted","Linux","X64"]') || 'ubuntu-latest' }}
 
     defaults:
       run:
@@ -44,8 +58,9 @@ jobs:
 
   go:
     name: Go tests
-    needs: frontend
-    runs-on: [self-hosted, Linux, X64]
+    needs: [runner-check, frontend]
+    if: always() && needs.frontend.result == 'success'
+    runs-on: ${{ needs.runner-check.outputs.available == 'true' && fromJSON('["self-hosted","Linux","X64"]') || 'ubuntu-latest' }}
     environment: trace
     env:
       GOPRIVATE: github.com/C-Ma-P/*
@@ -53,6 +68,12 @@ jobs:
       GOPROXY: https://proxy.golang.org,direct
 
     steps:
+      - name: Install system dependencies
+        if: needs.runner-check.outputs.available != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libglib2.0-dev libgtk-3-dev libsoup-3.0-dev libwebkit2gtk-4.1-dev
+
       - name: Checkout
         uses: actions/checkout@v6
 
@@ -66,7 +87,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-          cache: false
+          cache: ${{ needs.runner-check.outputs.available != 'true' }}
 
       - name: Require private modules token
         env:
