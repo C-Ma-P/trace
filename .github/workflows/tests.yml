@@ -9,19 +9,26 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   runner-check:
     name: Check self-hosted runner
-    runs-on: [self-hosted, Linux, X64]
-    timeout-minutes: 1
+    runs-on: ubuntu-latest
     outputs:
       available: ${{ steps.check.outputs.available }}
     steps:
-      - name: Runner is online
+      - name: Query runner availability
         id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          timeout 10s bash -lc 'echo "available=true" >> "$GITHUB_OUTPUT"'
+          available=$(gh api "repos/${{ github.repository }}/actions/runners" \
+            --jq '.runners | map(select(
+              .status == "online" and
+              (.labels | map(.name) | contains(["self-hosted","Linux","X64"]))
+            )) | length > 0')
+          echo "available=$available" >> "$GITHUB_OUTPUT"
 
   frontend:
     name: Frontend build
