@@ -112,8 +112,5 @@ jobs:
         run: |
           git config --global url."https://x-access-token:${PRIVATE_MODULES_TOKEN}@github.com/C-Ma-P/".insteadOf "https://github.com/C-Ma-P/"
 
-      - name: Download Go modules
-        run: go mod download
-
       - name: Run Go tests
         run: go test -v -mod=mod ./...
