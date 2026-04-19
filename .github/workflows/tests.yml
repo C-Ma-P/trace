@@ -20,6 +20,7 @@ jobs:
     steps:
       - name: Query runner availability
         id: check
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -27,7 +28,7 @@ jobs:
             --jq '.runners | map(select(
               .status == "online" and
               (.labels | map(.name) | contains(["self-hosted","Linux","X64"]))
-            )) | length > 0')
+            )) | length > 0') || available=false
           echo "available=$available" >> "$GITHUB_OUTPUT"
 
   frontend:
