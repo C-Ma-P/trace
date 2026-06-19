@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/C-Ma-P/trace/internal/domain"
@@ -260,33 +259,16 @@ func (s *Service) ImportSupplierOffer(ctx context.Context, requirementID string,
 // the offer's manufacturer + MPN (case-insensitive exact match). If a match is
 // found in the same category, it is reused. Otherwise a new component is created.
 func (s *Service) findOrCreateComponentFromOffer(ctx context.Context, category domain.Category, offer domain.SavedSupplierOffer) (domain.Component, bool, error) {
-	if offer.Manufacturer != "" && offer.MPN != "" {
-		cat := category
-		candidates, err := s.components.FindComponents(ctx, domain.ComponentFilter{
-			Category:     &cat,
-			Manufacturer: offer.Manufacturer,
-			MPN:          offer.MPN,
-		})
-		if err == nil {
-			for _, c := range candidates {
-				if strings.EqualFold(c.Manufacturer, offer.Manufacturer) && strings.EqualFold(c.MPN, offer.MPN) {
-					return c, true, nil
-				}
-			}
-		}
+	supplierOffer := sourcing.SupplierOffer{
+		Provider:           offer.Provider,
+		Manufacturer:       offer.Manufacturer,
+		MPN:                offer.MPN,
+		SupplierPartNumber: offer.ProviderPartID,
+		Description:        offer.Description,
+		Package:            offer.Package,
 	}
-
-	component, err := s.CreateComponent(ctx, domain.Component{
-		Category:     category,
-		MPN:          offer.MPN,
-		Manufacturer: offer.Manufacturer,
-		Package:      offer.Package,
-		Description:  offer.Description,
-	})
-	if err != nil {
-		return domain.Component{}, false, err
-	}
-	return component, false, nil
+	attrs := sourcing.ComponentAttributesFromOffer(category, supplierOffer)
+	return s.findOrCreateComponentWithSupplierAttrs(ctx, category, offer.Manufacturer, offer.MPN, offer.Package, offer.Description, attrs)
 }
 
 func (s *Service) maybeEnrichSavedSupplierOffer(ctx context.Context, offer *domain.SavedSupplierOffer) {

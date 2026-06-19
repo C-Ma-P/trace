@@ -1,12 +1,33 @@
 package app
 
-import "fmt"
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	"github.com/C-Ma-P/trace/internal/domain"
+)
 
 func (a *App) ListRecentProjects() []RecentProjectResponse {
 	if a.launcher == nil {
 		return []RecentProjectResponse{}
 	}
 	st := a.launcher.Load()
+	if a.svc != nil {
+		filtered := st.RecentProjects[:0]
+		for _, rp := range st.RecentProjects {
+			_, err := a.svc.GetProject(context.Background(), rp.ID)
+			if err != nil {
+				var notFound domain.ErrNotFound
+				if errors.As(err, &notFound) {
+					_ = a.launcher.RemoveProject(rp.ID)
+					continue
+				}
+			}
+			filtered = append(filtered, rp)
+		}
+		st.RecentProjects = filtered
+	}
 	out := make([]RecentProjectResponse, len(st.RecentProjects))
 	for i, rp := range st.RecentProjects {
 		out[i] = RecentProjectResponse{

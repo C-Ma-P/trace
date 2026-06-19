@@ -323,6 +323,22 @@ func (s *Server) handleScanPost(w http.ResponseWriter, r *http.Request) {
 	case sourcing.ProviderMouser:
 		vendorPartID, quantity = parseMouserBarcode(req.RawValue)
 		log.Printf("[phone-intake] Mouser scan: part=%s qty=%s", vendorPartID, quantity)
+	case sourcing.ProviderDigiKey:
+		log.Printf("[phone-intake] DigiKey barcode parsing not supported format=%s", req.Format)
+		id := generateToken()
+		scan := &PendingScan{
+			ID:        id,
+			Timestamp: time.Now(),
+			Vendor:    req.Vendor,
+			Format:    req.Format,
+			RawValue:  req.RawValue,
+			Error:     "DigiKey barcode parsing is not supported",
+		}
+		s.mu.Lock()
+		s.pending[id] = scan
+		s.mu.Unlock()
+		writeJSON(w, http.StatusOK, ScanResponse{OK: true, ID: id, ResolveError: scan.Error})
+		return
 	default:
 		log.Printf("[phone-intake] unknown vendor %q format=%s", req.Vendor, req.Format)
 		writeJSON(w, http.StatusOK, ScanResponse{OK: true})

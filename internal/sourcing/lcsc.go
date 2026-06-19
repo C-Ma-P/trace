@@ -131,6 +131,9 @@ func normalizeLCSCProduct(product lcsc.Product) SupplierOffer {
 		"catalog":       product.CatalogName,
 		"parentCatalog": product.ParentCatalogName,
 	}
+	for _, parameter := range product.ParamVOList {
+		putRawValue(raw, parameter.ParamNameEn, parameter.ParamValueEn)
+	}
 
 	return SupplierOffer{
 		Provider:           ProviderLCSC,

@@ -144,6 +144,9 @@ func normalizeMouserPart(part mouser.Part) SupplierOffer {
 		"leadTime":     part.LeadTime,
 		"category":     part.Category,
 	}
+	for _, attribute := range part.ProductAttributes {
+		putRawValue(raw, attribute.AttributeName, attribute.AttributeValue)
+	}
 
 	return SupplierOffer{
 		Provider:           ProviderMouser,
@@ -167,13 +170,28 @@ func normalizeMouserPart(part mouser.Part) SupplierOffer {
 }
 
 func packageFromMouserAttributes(attributes []mouser.ProductAttribute) string {
+	best := ""
 	for _, attribute := range attributes {
 		name := strings.TrimSpace(attribute.AttributeName)
-		if strings.EqualFold(name, "Package / Case") || strings.EqualFold(name, "Packaging") || strings.EqualFold(name, "Mounting Style") {
-			return strings.TrimSpace(attribute.AttributeValue)
+		value := strings.TrimSpace(attribute.AttributeValue)
+		switch {
+		case strings.EqualFold(name, "Package / Case") || strings.EqualFold(name, "Supplier Device Package"):
+			return normalizePackageValue(value)
+		case strings.EqualFold(name, "Case Code - in") || strings.EqualFold(name, "Case Code - mm"):
+			if parsed := normalizePackageValue(value); parsed != "" {
+				best = parsed
+			}
+		case strings.EqualFold(name, "Package"):
+			if parsed := normalizePackageValue(value); parsed != "" {
+				best = parsed
+			}
+		case strings.EqualFold(name, "Packaging"):
+			if best == "" {
+				best = value
+			}
 		}
 	}
-	return ""
+	return best
 }
 
 func lowestMouserPrice(breaks []mouser.PriceBreak) float64 {

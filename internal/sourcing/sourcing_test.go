@@ -98,6 +98,10 @@ func TestNormalizeProviderOffers(t *testing.T) {
 		UnitPrice:                 0.12,
 		StandardPackage:           1,
 		ProductStatus:             digikey.ProductStatus{Text: "Active"},
+		Parameters: []digikey.Parameter{
+			{ParameterText: "Package / Case", ValueText: "SOT-23-5"},
+			{ParameterText: "Logic Type", ValueText: "Inverter"},
+		},
 		ProductVariations: []digikey.ProductVariation{{
 			PackageType:          digikey.PackageType{Name: "Tape & Reel (TR)"},
 			MinimumOrderQuantity: 1,
@@ -109,6 +113,9 @@ func TestNormalizeProviderOffers(t *testing.T) {
 	if digi.ImageURL != "https://example.com/photo.jpg" {
 		t.Fatalf("expected Digikey ImageURL to be populated, got %q", digi.ImageURL)
 	}
+	if got := digi.Raw["Logic Type"]; got != "Inverter" {
+		t.Fatalf("expected DigiKey parameter in raw map, got %q", got)
+	}
 
 	mouserOffer := normalizeMouserPart(mouser.Part{
 		Manufacturer:           "Murata",
@@ -119,27 +126,135 @@ func TestNormalizeProviderOffers(t *testing.T) {
 		ProductDetailUrl:       "https://www.mouser.com/ProductDetail/test",
 		AvailabilityInStock:    "5,432 In Stock",
 		Min:                    "1",
+		Category:               "Chip Resistors",
 		LifecycleStatus:        "Active",
 		PriceBreaks:            []mouser.PriceBreak{{Quantity: 1, Price: "$0.02", Currency: "USD"}},
-		ProductAttributes:      []mouser.ProductAttribute{{AttributeName: "Package / Case", AttributeValue: "0402"}},
+		ProductAttributes: []mouser.ProductAttribute{
+			{AttributeName: "Packaging", AttributeValue: "Reel"},
+			{AttributeName: "Package / Case", AttributeValue: "0402"},
+			{AttributeName: "Tolerance", AttributeValue: "1%"},
+		},
 	})
 	if mouserOffer.Stock == nil || *mouserOffer.Stock != 5432 || mouserOffer.Package != "0402" {
 		t.Fatalf("unexpected Mouser normalization: %#v", mouserOffer)
 	}
+	if got := mouserOffer.Raw["Tolerance"]; got != "1%" {
+		t.Fatalf("expected Mouser attribute in raw map, got %q", got)
+	}
+	if got := mouserOffer.Raw["category"]; got != "Chip Resistors" {
+		t.Fatalf("expected Mouser category to remain in raw map, got %q", got)
+	}
 
 	lcscOffer := normalizeLCSCProduct(lcsc.Product{
-		BrandNameEn:      "TDK",
-		ProductModel:     "C1005X7R1C104K050BB",
-		ProductCode:      "C14663",
-		ProductIntroEn:   "100nF 16V 0402 X7R",
-		PdfURL:           "https://example.com/tdk.pdf",
-		StockNumber:      9999,
-		MinPacketNumber:  5,
-		EncapStandard:    "0402",
+		BrandNameEn:       "TDK",
+		ProductModel:      "C1005X7R1C104K050BB",
+		ProductCode:       "C14663",
+		ProductIntroEn:    "100nF 16V 0402 X7R",
+		PdfURL:            "https://example.com/tdk.pdf",
+		StockNumber:       9999,
+		MinPacketNumber:   5,
+		EncapStandard:     "0402",
+		CatalogName:       "Chip Resistor - Surface Mount",
+		ParentCatalogName: "Resistors",
+		ParamVOList: []lcsc.Parameter{
+			{ParamNameEn: "Resistance", ParamValueEn: "10 kOhms"},
+			{ParamNameEn: "Tolerance", ParamValueEn: "1%"},
+		},
 		ProductPriceList: []lcsc.PriceBreak{{Ladder: 1, ProductPrice: lcsc.FlexFloat64(0.01), CurrencySymbol: "USD"}},
 	})
 	if lcscOffer.Provider != ProviderLCSC || lcscOffer.MOQ == nil || *lcscOffer.MOQ != 5 {
 		t.Fatalf("unexpected LCSC normalization: %#v", lcscOffer)
+	}
+	if got := lcscOffer.Raw["Resistance"]; got != "10 kOhms" {
+		t.Fatalf("expected LCSC detail parameter in raw map, got %q", got)
+	}
+	if got := lcscOffer.Raw["catalog"]; got != "Chip Resistor - Surface Mount" {
+		t.Fatalf("expected LCSC catalog to remain in raw map, got %q", got)
+	}
+}
+
+func TestComponentAttributesFromOffer_Resistor(t *testing.T) {
+	offer := SupplierOffer{
+		Provider:    ProviderMouser,
+		Description: "10k 1% 1/10W thick film resistor 0402 100ppm/°C",
+		Package:     "0402",
+		Raw: map[string]string{
+			"category":                "Chip Resistors",
+			"Resistance":              "10 kOhms",
+			"Tolerance":               "±1%",
+			"Power Rating":            "1/10W",
+			"Temperature Coefficient": "100ppm/°C",
+			"Technology":              "Thick Film",
+			"Package / Case":          "0402",
+		},
+	}
+
+	attrs := ComponentAttributesFromOffer(domain.CategoryResistor, offer)
+	idx := attrsByKey(attrs)
+
+	assertNumberAttr(t, idx, registry.AttrResistanceOhms, 10000, "ohm")
+	assertNumberAttr(t, idx, registry.AttrTolerancePercent, 1, "percent")
+	assertNumberAttr(t, idx, registry.AttrPowerW, 0.1, "W")
+	assertNumberAttr(t, idx, registry.AttrTempCoPPMC, 100, "ppm/C")
+	assertTextAttr(t, idx, registry.AttrResistorType, "Thick Film")
+	assertTextAttr(t, idx, registry.AttrPackage, "0402")
+	if len(attrs) != 6 {
+		t.Fatalf("expected 6 canonical attrs, got %#v", attrs)
+	}
+}
+
+func TestComponentAttributesFromOffer_Resistor_FuzzyMouserFieldsAndDescription(t *testing.T) {
+	offer := SupplierOffer{
+		Provider:    ProviderMouser,
+		Description: "Res Thick Film 0603 1M Ohms 1% 1/10W 100 ppm/C",
+		Package:     "Reel",
+		Raw: map[string]string{
+			"category":             "Chip Resistors",
+			"Ohms":                 "1 MOhms",
+			"TCR (ppm/C)":          "100 ppm/C",
+			"Packaging":            "Reel",
+			"Case Code - in":       "0603",
+			"Technology":           "Thick Film",
+			"Power (Watts)":        "1/10W",
+			"Resistance Tolerance": "1%",
+		},
+	}
+
+	attrs := ComponentAttributesFromOffer(domain.CategoryResistor, offer)
+	idx := attrsByKey(attrs)
+
+	assertNumberAttr(t, idx, registry.AttrResistanceOhms, 1e6, "ohm")
+	assertNumberAttr(t, idx, registry.AttrTempCoPPMC, 100, "ppm/C")
+	assertTextAttr(t, idx, registry.AttrPackage, "0603")
+}
+
+func attrsByKey(attrs []domain.AttributeValue) map[string]domain.AttributeValue {
+	idx := make(map[string]domain.AttributeValue, len(attrs))
+	for _, attr := range attrs {
+		idx[attr.Key] = attr
+	}
+	return idx
+}
+
+func assertNumberAttr(t *testing.T, idx map[string]domain.AttributeValue, key string, want float64, unit string) {
+	t.Helper()
+	attr, ok := idx[key]
+	if !ok || attr.Number == nil {
+		t.Fatalf("expected numeric attr %q, got %#v", key, attr)
+	}
+	if *attr.Number != want || attr.Unit != unit {
+		t.Fatalf("expected %s=%v %s, got %#v", key, want, unit, attr)
+	}
+}
+
+func assertTextAttr(t *testing.T, idx map[string]domain.AttributeValue, key, want string) {
+	t.Helper()
+	attr, ok := idx[key]
+	if !ok || attr.Text == nil {
+		t.Fatalf("expected text attr %q, got %#v", key, attr)
+	}
+	if *attr.Text != want {
+		t.Fatalf("expected %s=%q, got %#v", key, want, attr)
 	}
 }
 

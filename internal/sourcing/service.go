@@ -238,6 +238,8 @@ func (s *Service) LookupByVendorPartID(ctx context.Context, vendor, partID strin
 			return v.LookupByPartCode(ctx, partID)
 		case *MouserProvider:
 			return v.LookupByPartNumber(ctx, partID)
+		case *DigiKeyProvider:
+			return v.LookupByPartNumber(ctx, partID)
 		default:
 			return SupplierOffer{}, fmt.Errorf("provider %q does not support barcode lookup", vendor)
 		}

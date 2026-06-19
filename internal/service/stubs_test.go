@@ -8,11 +8,12 @@ import (
 )
 
 type stubComponentRepo struct {
-	upserted   []domain.AttributeDefinition
-	getResult  domain.Component
-	getErr     error
-	findResult []domain.Component
-	lastFilter domain.ComponentFilter
+	upserted    []domain.AttributeDefinition
+	getResult   domain.Component
+	getErr      error
+	findResult  []domain.Component
+	lastFilter  domain.ComponentFilter
+	createdComp *domain.Component
 
 	updatedComp   *domain.Component
 	updateCompErr error
@@ -21,6 +22,8 @@ type stubComponentRepo struct {
 }
 
 func (s *stubComponentRepo) CreateComponent(_ context.Context, c domain.Component) (domain.Component, error) {
+	copy := c
+	s.createdComp = &copy
 	return c, nil
 }
 func (s *stubComponentRepo) GetComponent(_ context.Context, _ string) (domain.Component, error) {

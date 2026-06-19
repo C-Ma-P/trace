@@ -87,6 +87,17 @@ func (p *DigiKeyProvider) Search(ctx context.Context, query RequirementQuery) ([
 	return offers, nil
 }
 
+func (p *DigiKeyProvider) LookupByPartNumber(ctx context.Context, partNumber string) (SupplierOffer, error) {
+	if !p.Enabled() {
+		return SupplierOffer{}, errors.New("DigiKey provider not configured")
+	}
+	response, err := p.client.Product.Details(ctx, strings.TrimSpace(partNumber))
+	if err != nil {
+		return SupplierOffer{}, err
+	}
+	return normalizeDigiKeyProduct(response.Product), nil
+}
+
 // digikeyErrorBody is the JSON structure DigiKey returns for auth/API errors.
 type digikeyErrorBody struct {
 	ErrorMessage string `json:"ErrorMessage"`
@@ -163,6 +174,9 @@ func normalizeDigiKeyProduct(product digikey.Product) SupplierOffer {
 	raw := map[string]string{
 		"category": product.Category.Name,
 		"status":   lifecycle,
+	}
+	for _, parameter := range product.Parameters {
+		putRawValue(raw, parameter.ParameterText, parameter.ValueText)
 	}
 
 	return SupplierOffer{
