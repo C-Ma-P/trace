@@ -12,6 +12,7 @@ import (
 	"github.com/C-Ma-P/trace/internal/domain/registry"
 	"github.com/C-Ma-P/trace/internal/kicad"
 	"github.com/C-Ma-P/trace/internal/kicadconfig"
+	easyedaprovider "github.com/C-Ma-P/trace/internal/providers/easyeda"
 	"github.com/C-Ma-P/trace/internal/sourcing"
 	"github.com/C-Ma-P/trace/internal/supplierconfig"
 )
@@ -26,6 +27,7 @@ type Service struct {
 	sourcingCoordinator   *sourcing.Coordinator
 	sourcingCoordinatorMu sync.Mutex
 	supplierConfig        *supplierconfig.Manager
+	easyeda               easyEDAImporter
 }
 
 func New(components domain.ComponentRepository, projects domain.ProjectRepository, assets domain.ComponentAssetRepository, kicadServices ...*kicad.Service) *Service {
@@ -51,6 +53,11 @@ func (s *Service) SetKiCadConfig(configSvc *kicadconfig.Manager) *Service {
 
 func (s *Service) SetSupplierConfig(configSvc *supplierconfig.Manager) *Service {
 	s.supplierConfig = configSvc
+	return s
+}
+
+func (s *Service) SetEasyEDA(importer *easyedaprovider.Service) *Service {
+	s.easyeda = importer
 	return s
 }
 

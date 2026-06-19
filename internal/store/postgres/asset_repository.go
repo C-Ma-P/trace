@@ -34,7 +34,7 @@ func (r *ComponentAssetRepository) GetComponentAsset(ctx context.Context, id str
 	var asset domain.ComponentAsset
 	if err := r.store.db.GetContext(ctx, &asset, `
 		select id, component_id, asset_type, source, status, label, url_or_path,
-		       preview_url, metadata_json, created_at, updated_at
+		       preview_url, coalesce(metadata_json, 'null'::jsonb) as metadata_json, created_at, updated_at
 		from component_assets
 		where id = $1
 	`, id); err != nil {
@@ -50,7 +50,7 @@ func (r *ComponentAssetRepository) ListComponentAssets(ctx context.Context, comp
 	var assets []domain.ComponentAsset
 	if err := r.store.db.SelectContext(ctx, &assets, `
 		select id, component_id, asset_type, source, status, label, url_or_path,
-		       preview_url, metadata_json, created_at, updated_at
+		       preview_url, coalesce(metadata_json, 'null'::jsonb) as metadata_json, created_at, updated_at
 		from component_assets
 		where component_id = $1
 		order by asset_type, created_at
@@ -64,7 +64,7 @@ func (r *ComponentAssetRepository) ListComponentAssetsByType(ctx context.Context
 	var assets []domain.ComponentAsset
 	if err := r.store.db.SelectContext(ctx, &assets, `
 		select id, component_id, asset_type, source, status, label, url_or_path,
-		       preview_url, metadata_json, created_at, updated_at
+		       preview_url, coalesce(metadata_json, 'null'::jsonb) as metadata_json, created_at, updated_at
 		from component_assets
 		where component_id = $1 and asset_type = $2
 		order by created_at

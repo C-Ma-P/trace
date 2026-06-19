@@ -1,25 +1,16 @@
 package sourcing
 
 import (
-	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/C-Ma-P/trace/internal/domain"
 	"github.com/C-Ma-P/trace/internal/domain/registry"
-)
-
-var (
-	attributeTolerancePattern  = regexp.MustCompile(`(?i)[±+\-]?\s*(\d+(?:\.\d+)?)\s*%`)
-	attributePowerPattern      = regexp.MustCompile(`(?i)(\d+(?:\.\d+)?(?:\s*/\s*\d+(?:\.\d+)?)?)\s*(mW|W)\b`)
-	attributeTempcoPattern     = regexp.MustCompile(`(?i)[±+\-]?\s*(\d+(?:\.\d+)?)\s*ppm(?:\s*/\s*(?:°\s*)?C)?`)
-	attributePackagePattern    = regexp.MustCompile(`(?i)(0201|0402|0603|0805|1206|1210|1812|2010|2512|SOT-23(?:-\d+)?|SOIC-\d+|TSSOP-\d+|QFN-\d+|QFP-\d+|LQFP-\d+|DIP-\d+|BGA-\d+|TO-\d+|SOD-\d+|SMA|SMB|SMC)`)
-	attributeResistancePattern = regexp.MustCompile(`(?i)(?:\b\d+[rkm]\d*\b|\b\d+(?:\.\d+)?\s*(?:meg|[kKmM])?\s*(?:ohms?|ohm|Ω|Ω)\b|\b0r\b|\b\d+(?:\.\d+)?\s*[kKmM]\b)`)
+	"github.com/C-Ma-P/trace/internal/electronics/specparse"
 )
 
 func ComponentAttributesFromOffer(category domain.Category, offer SupplierOffer) []domain.AttributeValue {
-	out := make([]domain.AttributeValue, 0, 6)
-	seen := make(map[string]struct{}, 6)
+	out := make([]domain.AttributeValue, 0, 8)
+	seen := make(map[string]struct{}, 8)
 	specs := newOfferSpecIndex(offer.Raw)
 
 	addAttribute := func(attr domain.AttributeValue) {
@@ -38,22 +29,22 @@ func ComponentAttributesFromOffer(category domain.Category, offer SupplierOffer)
 
 	switch category {
 	case domain.CategoryResistor:
-		if value, ok := parseResistanceValue(firstNonEmpty(
+		if value, ok := specparse.ParseResistance(firstNonEmpty(
 			specs.firstResistance(),
 			offer.Description,
 		)); ok {
 			addAttribute(numberAttribute(registry.AttrResistanceOhms, value, "ohm"))
 		}
-		if value, ok := parsePatternNumber(firstNonEmpty(
+		if value, ok := specparse.ParseTolerancePercent(firstNonEmpty(
 			specs.firstFuzzy(
 				[]string{"Tolerance", "Resistance Tolerance"},
 				[]string{"tolerance"},
 			),
 			offer.Description,
-		), attributeTolerancePattern); ok {
+		)); ok {
 			addAttribute(numberAttribute(registry.AttrTolerancePercent, value, "percent"))
 		}
-		if value, ok := parsePowerValue(firstNonEmpty(
+		if value, ok := specparse.ParsePower(firstNonEmpty(
 			specs.firstFuzzy(
 				[]string{"Power Rating", "Power (Watts)", "Power", "Wattage"},
 				[]string{"power", "watt"},
@@ -62,13 +53,13 @@ func ComponentAttributesFromOffer(category domain.Category, offer SupplierOffer)
 		)); ok {
 			addAttribute(numberAttribute(registry.AttrPowerW, value, "W"))
 		}
-		if value, ok := parsePatternNumber(firstNonEmpty(
+		if value, ok := specparse.ParseTempcoPPMC(firstNonEmpty(
 			specs.firstFuzzy(
 				[]string{"Temperature Coefficient", "Temp Coefficient", "TC", "TCR"},
 				[]string{"temperaturecoefficient", "tempcoefficient", "tempco", "tcr", "ppm"},
 			),
 			offer.Description,
-		), attributeTempcoPattern); ok {
+		)); ok {
 			addAttribute(numberAttribute(registry.AttrTempCoPPMC, value, "ppm/C"))
 		}
 		if resistorType := firstNonEmpty(
@@ -80,6 +71,124 @@ func ComponentAttributesFromOffer(category domain.Category, offer SupplierOffer)
 		); resistorType != "" {
 			addAttribute(textAttribute(registry.AttrResistorType, resistorType))
 		}
+	case domain.CategoryCapacitor:
+		if value, ok := specparse.ParseCapacitance(firstNonEmpty(
+			specs.firstFuzzy(
+				[]string{"Capacitance", "Value", "Capacitance Value"},
+				[]string{"capacitance", "capvalue"},
+			),
+			offer.Description,
+		)); ok {
+			addAttribute(numberAttribute(registry.AttrCapacitanceF, value, "F"))
+		}
+		if value, ok := specparse.ParseTolerancePercent(firstNonEmpty(
+			specs.firstFuzzy(
+				[]string{"Tolerance", "Capacitance Tolerance"},
+				[]string{"tolerance"},
+			),
+			offer.Description,
+		)); ok {
+			addAttribute(numberAttribute(registry.AttrTolerancePercent, value, "percent"))
+		}
+		if value, ok := specparse.ParseVoltage(firstNonEmpty(
+			specs.firstFuzzy(
+				[]string{"Voltage - Rated", "Voltage Rated", "Voltage Rating", "Voltage Rating (DC)", "Rated Voltage", "Voltage"},
+				[]string{"voltagerated", "voltagerating", "ratedvoltage", "voltage"},
+			),
+			offer.Description,
+		)); ok {
+			addAttribute(numberAttribute(registry.AttrVoltageV, value, "V"))
+		}
+		if dielectric := firstNonEmpty(
+			specs.firstFuzzy(
+				[]string{"Temperature Coefficient", "Dielectric", "Dielectric Material", "Class"},
+				[]string{"temperaturecoefficient", "dielectric", "class"},
+			),
+			parseCapacitorDielectricFromDescription(offer.Description),
+		); dielectric != "" {
+			addAttribute(textAttribute(registry.AttrDielectric, dielectric))
+		}
+		if capacitorType := firstNonEmpty(
+			specs.firstFuzzy(
+				[]string{"Capacitor Type", "Type"},
+				[]string{"capacitortype"},
+			),
+			parseCapacitorTypeFromDescription(offer.Description),
+		); capacitorType != "" {
+			addAttribute(textAttribute(registry.AttrCapacitorType, capacitorType))
+		}
+	case domain.CategoryInductor:
+		if value, ok := specparse.ParseInductance(firstNonEmpty(
+			specs.firstFuzzy(
+				[]string{"Inductance", "Value"},
+				[]string{"inductance"},
+			),
+			offer.Description,
+		)); ok {
+			addAttribute(numberAttribute(registry.AttrInductanceH, value, "H"))
+		}
+		if value, ok := specparse.ParseTolerancePercent(firstNonEmpty(
+			specs.firstFuzzy(
+				[]string{"Tolerance"},
+				[]string{"tolerance"},
+			),
+			offer.Description,
+		)); ok {
+			addAttribute(numberAttribute(registry.AttrTolerancePercent, value, "percent"))
+		}
+		if value, ok := specparse.ParseCurrent(firstNonEmpty(
+			specs.firstFuzzy(
+				[]string{"Current Rating (Amps)", "Current Rating", "Rated Current", "Current - Rated", "Current - Saturation (Isat)", "Saturation Current (Isat)"},
+				[]string{"currentrating", "ratedcurrent", "currentrated", "currentsaturation", "saturationcurrent", "isat"},
+			),
+			offer.Description,
+		)); ok {
+			addAttribute(numberAttribute(registry.AttrCurrentA, value, "A"))
+		}
+		if value, ok := specparse.ParseResistance(firstNonEmpty(
+			specs.firstFuzzy(
+				[]string{"DC Resistance (DCR)", "DC Resistance", "DCR"},
+				[]string{"dcresistance", "dcr"},
+			),
+		)); ok {
+			addAttribute(numberAttribute(registry.AttrDCROhms, value, "ohm"))
+		}
+		if inductorType := firstNonEmpty(
+			specs.firstFuzzy(
+				[]string{"Inductor Type", "Type"},
+				[]string{"inductortype"},
+			),
+			parseInductorTypeFromDescription(offer.Description),
+		); inductorType != "" {
+			addAttribute(textAttribute(registry.AttrInductorType, inductorType))
+		}
+	case domain.CategoryFerriteBead:
+		if value, ok := specparse.ParseResistance(firstNonEmpty(
+			specs.firstFuzzy(
+				[]string{"Impedance @ 100MHz", "Impedance @ 100 MHz", "Impedance @ Frequency", "Impedance"},
+				[]string{"impedance"},
+			),
+			offer.Description,
+		)); ok {
+			addAttribute(numberAttribute(registry.AttrImpedanceOhms, value, "ohm"))
+		}
+		if value, ok := specparse.ParseCurrent(firstNonEmpty(
+			specs.firstFuzzy(
+				[]string{"Current Rating (Max)", "Current Rating", "Rated Current", "Current"},
+				[]string{"currentrating", "ratedcurrent", "current"},
+			),
+			offer.Description,
+		)); ok {
+			addAttribute(numberAttribute(registry.AttrCurrentA, value, "A"))
+		}
+		if value, ok := specparse.ParseResistance(firstNonEmpty(
+			specs.firstFuzzy(
+				[]string{"DC Resistance (DCR)", "DC Resistance", "DCR", "Resistance"},
+				[]string{"dcresistance", "dcr"},
+			),
+		)); ok {
+			addAttribute(numberAttribute(registry.AttrDCROhm, value, "ohm"))
+		}
 	}
 
 	if packageName := firstNonEmpty(
@@ -88,9 +197,9 @@ func ComponentAttributesFromOffer(category domain.Category, offer SupplierOffer)
 			[]string{"packagecase", "supplierdevicepackage", "package", "encapstandard", "casecode"},
 		),
 		strings.TrimSpace(offer.Package),
-		parsePackageFromText(offer.Description),
+		specparse.ParsePackage(offer.Description),
 	); packageName != "" {
-		addAttribute(textAttribute(registry.AttrPackage, normalizePackageValue(packageName)))
+		addAttribute(textAttribute(registry.AttrPackage, specparse.NormalizePackage(packageName)))
 	}
 
 	return out
@@ -106,176 +215,71 @@ func textAttribute(key, value string) domain.AttributeValue {
 	return domain.AttributeValue{Key: key, ValueType: domain.ValueTypeText, Text: &copy}
 }
 
-func parseResistanceValue(raw string) (float64, bool) {
-	raw = extractResistanceToken(raw)
-	normalized := normalizeSpecValue(raw)
-	normalized = strings.TrimSuffix(normalized, "OHMS")
-	normalized = strings.TrimSuffix(normalized, "OHM")
-	if normalized == "" {
-		return 0, false
-	}
-	if strings.ContainsAny(normalized, "RKM") {
-		return parseLetterDecimalValue(normalized, map[string]float64{"R": 1, "K": 1e3, "M": 1e6})
-	}
-	return parseScaledNumber(normalized, []scaledSuffix{{suffix: "K", multiplier: 1e3}, {suffix: "M", multiplier: 1e6}})
-}
-
-func parsePowerValue(raw string) (float64, bool) {
-	match := attributePowerPattern.FindStringSubmatch(strings.TrimSpace(raw))
-	if len(match) != 3 {
-		return 0, false
-	}
-	value, ok := parseFractionalNumber(match[1])
-	if !ok {
-		return 0, false
-	}
-	unit := strings.ToUpper(strings.TrimSpace(match[2]))
-	if unit == "MW" {
-		value /= 1000
-	}
-	return value, true
-}
-
-func parsePatternNumber(raw string, pattern *regexp.Regexp) (float64, bool) {
-	match := pattern.FindStringSubmatch(strings.TrimSpace(raw))
-	if len(match) < 2 {
-		return 0, false
-	}
-	value, err := strconv.ParseFloat(match[1], 64)
-	if err != nil {
-		return 0, false
-	}
-	return value, true
-}
-
-type scaledSuffix struct {
-	suffix     string
-	multiplier float64
-}
-
-func parseScaledNumber(raw string, suffixes []scaledSuffix) (float64, bool) {
-	for _, suffix := range suffixes {
-		if !strings.HasSuffix(raw, suffix.suffix) {
-			continue
-		}
-		numberPart := strings.TrimSuffix(raw, suffix.suffix)
-		if numberPart == "" {
-			return 0, false
-		}
-		value, err := strconv.ParseFloat(numberPart, 64)
-		if err != nil {
-			return 0, false
-		}
-		return value * suffix.multiplier, true
-	}
-	value, err := strconv.ParseFloat(raw, 64)
-	if err != nil {
-		return 0, false
-	}
-	return value, true
-}
-
-func parseLetterDecimalValue(raw string, multipliers map[string]float64) (float64, bool) {
-	for _, letter := range []string{"R", "K", "M"} {
-		multiplier, ok := multipliers[letter]
-		if !ok {
-			continue
-		}
-		idx := strings.Index(raw, letter)
-		if idx < 0 {
-			continue
-		}
-		left := raw[:idx]
-		right := raw[idx+1:]
-		if left == "" {
-			left = "0"
-		}
-		numberText := left
-		if right != "" {
-			numberText = left + "." + right
-		}
-		value, err := strconv.ParseFloat(numberText, 64)
-		if err != nil {
-			return 0, false
-		}
-		return value * multiplier, true
-	}
-	return 0, false
-}
-
-func parseFractionalNumber(raw string) (float64, bool) {
-	trimmed := strings.TrimSpace(raw)
-	if strings.Contains(trimmed, "/") {
-		parts := strings.SplitN(trimmed, "/", 2)
-		if len(parts) != 2 {
-			return 0, false
-		}
-		numerator, err := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
-		if err != nil {
-			return 0, false
-		}
-		denominator, err := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64)
-		if err != nil || denominator == 0 {
-			return 0, false
-		}
-		return numerator / denominator, true
-	}
-	value, err := strconv.ParseFloat(trimmed, 64)
-	if err != nil {
-		return 0, false
-	}
-	return value, true
-}
-
 func parseResistorTypeFromDescription(raw string) string {
 	upper := strings.ToUpper(raw)
 	for _, candidate := range []string{"THICK FILM", "THIN FILM", "METAL FILM", "CARBON FILM", "WIREWOUND"} {
 		if strings.Contains(upper, candidate) {
-			return strings.Title(strings.ToLower(candidate))
+			return titleWords(candidate)
 		}
 	}
 	return ""
 }
 
-func parsePackageFromText(raw string) string {
-	match := attributePackagePattern.FindStringSubmatch(strings.TrimSpace(raw))
-	if len(match) < 2 {
-		return ""
+func parseCapacitorDielectricFromDescription(raw string) string {
+	upper := strings.ToUpper(raw)
+	for _, candidate := range []string{"C0G", "NP0", "X5R", "X7R", "Y5V"} {
+		if strings.Contains(upper, candidate) {
+			return candidate
+		}
 	}
-	return strings.TrimSpace(match[1])
+	return ""
 }
 
-func extractResistanceToken(raw string) string {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return ""
+func parseCapacitorTypeFromDescription(raw string) string {
+	upper := strings.ToUpper(raw)
+	for _, candidate := range []struct {
+		needle string
+		value  string
+	}{
+		{needle: "MLCC", value: "MLCC"},
+		{needle: "CERAMIC", value: "Ceramic"},
+		{needle: "TANTALUM", value: "Tantalum"},
+		{needle: "ELECTROLYTIC", value: "Electrolytic"},
+	} {
+		if strings.Contains(upper, candidate.needle) {
+			return candidate.value
+		}
 	}
-	if match := attributeResistancePattern.FindString(trimmed); match != "" {
-		return match
-	}
-	return trimmed
+	return ""
 }
 
-func normalizePackageValue(raw string) string {
-	if parsed := parsePackageFromText(raw); parsed != "" {
-		return parsed
+func parseInductorTypeFromDescription(raw string) string {
+	upper := strings.ToUpper(raw)
+	for _, candidate := range []struct {
+		needle string
+		value  string
+	}{
+		{needle: "SHIELDED", value: "Shielded"},
+		{needle: "UNSHIELDED", value: "Unshielded"},
+		{needle: "WIREWOUND", value: "Wirewound"},
+		{needle: "POWER INDUCTOR", value: "Power Inductor"},
+	} {
+		if strings.Contains(upper, candidate.needle) {
+			return candidate.value
+		}
 	}
-	return strings.TrimSpace(raw)
+	return ""
 }
 
-func normalizeSpecValue(raw string) string {
-	replacer := strings.NewReplacer(
-		"Ω", "OHM",
-		"Ω", "OHM",
-		"µ", "U",
-		"μ", "U",
-		",", "",
-		" ", "",
-	)
-	normalized := strings.ToUpper(strings.TrimSpace(raw))
-	normalized = replacer.Replace(normalized)
-	normalized = strings.TrimPrefix(normalized, "±")
-	return normalized
+func titleWords(raw string) string {
+	parts := strings.Fields(strings.ToLower(raw))
+	for i := range parts {
+		if len(parts[i]) == 0 {
+			continue
+		}
+		parts[i] = strings.ToUpper(parts[i][:1]) + parts[i][1:]
+	}
+	return strings.Join(parts, " ")
 }
 
 type offerSpecIndex struct {

@@ -245,6 +245,142 @@ func TestResolveComponentFromOffer_ReusesComponentAndMergesMissingAttrs(t *testi
 	}
 }
 
+func TestResolveComponentFromOffer_ReusesComponent_DoesNotOverwriteExistingAttrs(t *testing.T) {
+	existingResistance := 4700.0
+	existingTolerance := 5.0
+	findID := "comp-keep"
+	compRepo := &stubComponentRepo{
+		findResult: []domain.Component{{ID: findID, Category: domain.CategoryResistor, Manufacturer: "Yageo", MPN: "RC0402FR-074K7L"}},
+		getResult: domain.Component{
+			ID:           findID,
+			Category:     domain.CategoryResistor,
+			Manufacturer: "Yageo",
+			MPN:          "RC0402FR-074K7L",
+			Package:      "0402",
+			Attributes: []domain.AttributeValue{
+				{Key: registry.AttrResistanceOhms, ValueType: domain.ValueTypeNumber, Number: &existingResistance, Unit: "ohm"},
+				{Key: registry.AttrTolerancePercent, ValueType: domain.ValueTypeNumber, Number: &existingTolerance, Unit: "percent"},
+			},
+		},
+	}
+	svc := service.New(compRepo, &stubProjectRepo{}, &stubAssetRepo{})
+
+	component, err := svc.ResolveComponentFromOffer(context.Background(), sourcing.SupplierOffer{
+		Provider:     sourcing.ProviderMouser,
+		Manufacturer: "Yageo",
+		MPN:          "RC0402FR-074K7L",
+		Package:      "0402",
+		Description:  "10k 1% thick film resistor",
+		Raw: map[string]string{
+			"category":                "Chip Resistors",
+			"Resistance":              "10 kOhms",
+			"Tolerance":               "1%",
+			"Power Rating":            "0.1W",
+			"Temperature Coefficient": "100ppm/°C",
+			"Technology":              "Thick Film",
+			"Package / Case":          "0402",
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if compRepo.replacedID != findID {
+		t.Fatalf("expected attr merge on existing component, got %q", compRepo.replacedID)
+	}
+	merged := attrsByKey(compRepo.replacedAttrs)
+	if attr := merged[registry.AttrResistanceOhms]; attr.Number == nil || *attr.Number != 4700 {
+		t.Fatalf("expected existing resistance to win, got %#v", attr)
+	}
+	if attr := merged[registry.AttrTolerancePercent]; attr.Number == nil || *attr.Number != 5 {
+		t.Fatalf("expected existing tolerance to win, got %#v", attr)
+	}
+	if attr := merged[registry.AttrPowerW]; attr.Number == nil || *attr.Number != 0.1 {
+		t.Fatalf("expected missing power to be added, got %#v", attr)
+	}
+	if compRepo.updatedComp != nil {
+		t.Fatalf("did not expect package metadata update, got %#v", compRepo.updatedComp)
+	}
+	if len(component.Attributes) != len(compRepo.replacedAttrs) {
+		t.Fatalf("expected returned attrs to match persisted attrs, got %#v", component.Attributes)
+	}
+}
+
+func TestResolveComponentFromOffer_ReusesComponent_DoesNotAdoptPackagingLikeSupplierPackage(t *testing.T) {
+	findID := "comp-pkg"
+	compRepo := &stubComponentRepo{
+		findResult: []domain.Component{{ID: findID, Category: domain.CategoryResistor, Manufacturer: "Yageo", MPN: "RC0402FR-0710KL"}},
+		getResult: domain.Component{
+			ID:           findID,
+			Category:     domain.CategoryResistor,
+			Manufacturer: "Yageo",
+			MPN:          "RC0402FR-0710KL",
+			Package:      "Tube",
+		},
+	}
+	svc := service.New(compRepo, &stubProjectRepo{}, &stubAssetRepo{})
+
+	_, err := svc.ResolveComponentFromOffer(context.Background(), sourcing.SupplierOffer{
+		Provider:     sourcing.ProviderMouser,
+		Manufacturer: "Yageo",
+		MPN:          "RC0402FR-0710KL",
+		Package:      "Cut Tape",
+		Description:  "10k 1% thick film resistor",
+		Raw: map[string]string{
+			"category":     "Chip Resistors",
+			"Resistance":   "10 kOhms",
+			"Tolerance":    "1%",
+			"Power Rating": "0.1W",
+			"Packaging":    "Cut Tape",
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if compRepo.updatedComp != nil {
+		t.Fatalf("did not expect packaging-like supplier package to replace current package, got %#v", compRepo.updatedComp)
+	}
+}
+
+func TestResolveComponentFromOffer_ReusesComponent_AdoptsSupplierPackageWhenCurrentEmpty(t *testing.T) {
+	findID := "comp-empty"
+	compRepo := &stubComponentRepo{
+		findResult: []domain.Component{{ID: findID, Category: domain.CategoryResistor, Manufacturer: "Yageo", MPN: "RC0402FR-0710KL"}},
+		getResult: domain.Component{
+			ID:           findID,
+			Category:     domain.CategoryResistor,
+			Manufacturer: "Yageo",
+			MPN:          "RC0402FR-0710KL",
+			Package:      "",
+		},
+	}
+	svc := service.New(compRepo, &stubProjectRepo{}, &stubAssetRepo{})
+
+	component, err := svc.ResolveComponentFromOffer(context.Background(), sourcing.SupplierOffer{
+		Provider:     sourcing.ProviderMouser,
+		Manufacturer: "Yageo",
+		MPN:          "RC0402FR-0710KL",
+		Package:      "Reel",
+		Description:  "10k 1% thick film resistor 0402",
+		Raw: map[string]string{
+			"category":                "Chip Resistors",
+			"Resistance":              "10 kOhms",
+			"Tolerance":               "1%",
+			"Power Rating":            "0.1W",
+			"Temperature Coefficient": "100ppm/°C",
+			"Package / Case":          "0402",
+		},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if compRepo.updatedComp == nil || compRepo.updatedComp.Package != "0402" {
+		t.Fatalf("expected canonical supplier package adoption, got %#v", compRepo.updatedComp)
+	}
+	if component.Package != "0402" {
+		t.Fatalf("expected returned package 0402, got %q", component.Package)
+	}
+}
+
 func attrsByKey(attrs []domain.AttributeValue) map[string]domain.AttributeValue {
 	idx := make(map[string]domain.AttributeValue, len(attrs))
 	for _, attr := range attrs {

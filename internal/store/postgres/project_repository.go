@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -14,6 +15,141 @@ import (
 
 type ProjectRepository struct {
 	store *Store
+}
+
+type savedSupplierOfferRow struct {
+	ID                string     `db:"id"`
+	ProjectID         string     `db:"project_id"`
+	RequirementID     string     `db:"requirement_id"`
+	Provider          string     `db:"provider"`
+	ProviderPartID    string     `db:"provider_part_id"`
+	ProductURL        string     `db:"product_url"`
+	ImageURL          string     `db:"image_url"`
+	DatasheetURL      string     `db:"datasheet_url"`
+	HasSymbol         bool       `db:"has_symbol"`
+	HasFootprint      bool       `db:"has_footprint"`
+	HasDatasheet      bool       `db:"has_datasheet"`
+	Manufacturer      string     `db:"manufacturer"`
+	MPN               string     `db:"mpn"`
+	Description       string     `db:"description"`
+	Package           string     `db:"package"`
+	Stock             *int       `db:"stock"`
+	MOQ               *int       `db:"moq"`
+	UnitPrice         *float64   `db:"unit_price"`
+	Currency          string     `db:"currency"`
+	Lifecycle         string     `db:"lifecycle"`
+	RawJSON           []byte     `db:"raw_json"`
+	AssetProbeState   string     `db:"asset_probe_state"`
+	AssetProbeError   string     `db:"asset_probe_error"`
+	ProbeCompletedAt  *time.Time `db:"probe_completed_at"`
+	LinkedComponentID *string    `db:"linked_component_id"`
+	CapturedAt        time.Time  `db:"captured_at"`
+	CreatedAt         time.Time  `db:"created_at"`
+}
+
+func savedSupplierOfferRowFromDomain(offer domain.SavedSupplierOffer) (savedSupplierOfferRow, error) {
+	rawJSON, err := marshalSavedSupplierOfferRaw(offer.Raw)
+	if err != nil {
+		return savedSupplierOfferRow{}, err
+	}
+	return savedSupplierOfferRow{
+		ID:                offer.ID,
+		ProjectID:         offer.ProjectID,
+		RequirementID:     offer.RequirementID,
+		Provider:          offer.Provider,
+		ProviderPartID:    offer.ProviderPartID,
+		ProductURL:        offer.ProductURL,
+		ImageURL:          offer.ImageURL,
+		DatasheetURL:      offer.DatasheetURL,
+		HasSymbol:         offer.HasSymbol,
+		HasFootprint:      offer.HasFootprint,
+		HasDatasheet:      offer.HasDatasheet,
+		Manufacturer:      offer.Manufacturer,
+		MPN:               offer.MPN,
+		Description:       offer.Description,
+		Package:           offer.Package,
+		Stock:             offer.Stock,
+		MOQ:               offer.MOQ,
+		UnitPrice:         offer.UnitPrice,
+		Currency:          offer.Currency,
+		Lifecycle:         offer.Lifecycle,
+		RawJSON:           rawJSON,
+		AssetProbeState:   offer.AssetProbeState,
+		AssetProbeError:   offer.AssetProbeError,
+		ProbeCompletedAt:  offer.ProbeCompletedAt,
+		LinkedComponentID: offer.LinkedComponentID,
+		CapturedAt:        offer.CapturedAt,
+		CreatedAt:         offer.CreatedAt,
+	}, nil
+}
+
+func (r savedSupplierOfferRow) toDomain() (domain.SavedSupplierOffer, error) {
+	raw, err := unmarshalSavedSupplierOfferRaw(r.RawJSON)
+	if err != nil {
+		return domain.SavedSupplierOffer{}, err
+	}
+	return domain.SavedSupplierOffer{
+		ID:                r.ID,
+		ProjectID:         r.ProjectID,
+		RequirementID:     r.RequirementID,
+		Provider:          r.Provider,
+		ProviderPartID:    r.ProviderPartID,
+		ProductURL:        r.ProductURL,
+		ImageURL:          r.ImageURL,
+		DatasheetURL:      r.DatasheetURL,
+		HasSymbol:         r.HasSymbol,
+		HasFootprint:      r.HasFootprint,
+		HasDatasheet:      r.HasDatasheet,
+		Manufacturer:      r.Manufacturer,
+		MPN:               r.MPN,
+		Description:       r.Description,
+		Package:           r.Package,
+		Stock:             r.Stock,
+		MOQ:               r.MOQ,
+		UnitPrice:         r.UnitPrice,
+		Currency:          r.Currency,
+		Lifecycle:         r.Lifecycle,
+		Raw:               raw,
+		AssetProbeState:   r.AssetProbeState,
+		AssetProbeError:   r.AssetProbeError,
+		ProbeCompletedAt:  r.ProbeCompletedAt,
+		LinkedComponentID: r.LinkedComponentID,
+		CapturedAt:        r.CapturedAt,
+		CreatedAt:         r.CreatedAt,
+	}, nil
+}
+
+func marshalSavedSupplierOfferRaw(raw map[string]string) ([]byte, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	return json.Marshal(raw)
+}
+
+func unmarshalSavedSupplierOfferRaw(rawJSON []byte) (map[string]string, error) {
+	if len(rawJSON) == 0 || string(rawJSON) == "null" {
+		return nil, nil
+	}
+	var raw map[string]string
+	if err := json.Unmarshal(rawJSON, &raw); err != nil {
+		return nil, err
+	}
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	return raw, nil
+}
+
+func savedSupplierOfferRowsToDomain(rows []savedSupplierOfferRow) ([]domain.SavedSupplierOffer, error) {
+	offers := make([]domain.SavedSupplierOffer, 0, len(rows))
+	for _, row := range rows {
+		offer, err := row.toDomain()
+		if err != nil {
+			return nil, err
+		}
+		offers = append(offers, offer)
+	}
+	return offers, nil
 }
 
 type projectRequirementRow struct {
@@ -535,10 +671,14 @@ func (r *ProjectRepository) ListPartCandidatesByProject(ctx context.Context, pro
 // --- Saved Supplier Offers ---
 
 func (r *ProjectRepository) SaveSupplierOffer(ctx context.Context, offer domain.SavedSupplierOffer) (domain.SavedSupplierOffer, error) {
+	row, err := savedSupplierOfferRowFromDomain(offer)
+	if err != nil {
+		return domain.SavedSupplierOffer{}, err
+	}
 	if err := r.store.db.QueryRowxContext(ctx, `
 		insert into saved_supplier_offers(id, project_id, requirement_id, provider, provider_part_id, product_url,
-			image_url, datasheet_url, has_symbol, has_footprint, has_datasheet, manufacturer, mpn, description, package, stock, moq, unit_price, currency, asset_probe_state, asset_probe_error, probe_completed_at, linked_component_id, captured_at)
-		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+			image_url, datasheet_url, has_symbol, has_footprint, has_datasheet, manufacturer, mpn, description, package, stock, moq, unit_price, currency, lifecycle, raw_json, asset_probe_state, asset_probe_error, probe_completed_at, linked_component_id, captured_at)
+		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
 		on conflict (id) do update set
 			project_id = excluded.project_id,
 			requirement_id = excluded.requirement_id,
@@ -558,15 +698,17 @@ func (r *ProjectRepository) SaveSupplierOffer(ctx context.Context, offer domain.
 			moq = excluded.moq,
 			unit_price = excluded.unit_price,
 			currency = excluded.currency,
+			lifecycle = excluded.lifecycle,
+			raw_json = excluded.raw_json,
 			asset_probe_state = excluded.asset_probe_state,
 			asset_probe_error = excluded.asset_probe_error,
 			probe_completed_at = excluded.probe_completed_at,
 			linked_component_id = excluded.linked_component_id,
 			captured_at = excluded.captured_at
 		returning created_at
-	`, offer.ID, offer.ProjectID, offer.RequirementID, offer.Provider, offer.ProviderPartID, offer.ProductURL,
-		offer.ImageURL, offer.DatasheetURL, offer.HasSymbol, offer.HasFootprint, offer.HasDatasheet, offer.Manufacturer, offer.MPN, offer.Description, offer.Package, offer.Stock, offer.MOQ,
-		offer.UnitPrice, offer.Currency, offer.AssetProbeState, offer.AssetProbeError, offer.ProbeCompletedAt, offer.LinkedComponentID, offer.CapturedAt,
+	`, row.ID, row.ProjectID, row.RequirementID, row.Provider, row.ProviderPartID, row.ProductURL,
+		row.ImageURL, row.DatasheetURL, row.HasSymbol, row.HasFootprint, row.HasDatasheet, row.Manufacturer, row.MPN, row.Description, row.Package, row.Stock, row.MOQ,
+		row.UnitPrice, row.Currency, row.Lifecycle, row.RawJSON, row.AssetProbeState, row.AssetProbeError, row.ProbeCompletedAt, row.LinkedComponentID, row.CapturedAt,
 	).Scan(&offer.CreatedAt); err != nil {
 		return domain.SavedSupplierOffer{}, err
 	}
@@ -589,10 +731,10 @@ func (r *ProjectRepository) RemoveSavedSupplierOffer(ctx context.Context, offerI
 }
 
 func (r *ProjectRepository) ListSavedSupplierOffers(ctx context.Context, requirementID string) ([]domain.SavedSupplierOffer, error) {
-	var offers []domain.SavedSupplierOffer
-	if err := r.store.db.SelectContext(ctx, &offers, `
+	var rows []savedSupplierOfferRow
+	if err := r.store.db.SelectContext(ctx, &rows, `
 		select id, project_id, requirement_id, provider, provider_part_id, product_url,
-			image_url, datasheet_url, has_symbol, has_footprint, has_datasheet, manufacturer, mpn, description, package, stock, moq, unit_price, currency,
+			image_url, datasheet_url, has_symbol, has_footprint, has_datasheet, manufacturer, mpn, description, package, stock, moq, unit_price, currency, lifecycle, raw_json,
 			asset_probe_state, asset_probe_error, probe_completed_at, linked_component_id, captured_at, created_at
 		from saved_supplier_offers
 		where requirement_id = $1
@@ -600,14 +742,14 @@ func (r *ProjectRepository) ListSavedSupplierOffers(ctx context.Context, require
 	`, requirementID); err != nil {
 		return nil, err
 	}
-	return offers, nil
+	return savedSupplierOfferRowsToDomain(rows)
 }
 
 func (r *ProjectRepository) ListSavedSupplierOffersByProject(ctx context.Context, projectID string) ([]domain.SavedSupplierOffer, error) {
-	var offers []domain.SavedSupplierOffer
-	if err := r.store.db.SelectContext(ctx, &offers, `
+	var rows []savedSupplierOfferRow
+	if err := r.store.db.SelectContext(ctx, &rows, `
 		select id, project_id, requirement_id, provider, provider_part_id, product_url,
-			image_url, datasheet_url, has_symbol, has_footprint, has_datasheet, manufacturer, mpn, description, package, stock, moq, unit_price, currency,
+			image_url, datasheet_url, has_symbol, has_footprint, has_datasheet, manufacturer, mpn, description, package, stock, moq, unit_price, currency, lifecycle, raw_json,
 			asset_probe_state, asset_probe_error, probe_completed_at, linked_component_id, captured_at, created_at
 		from saved_supplier_offers
 		where project_id = $1
@@ -615,7 +757,7 @@ func (r *ProjectRepository) ListSavedSupplierOffersByProject(ctx context.Context
 	`, projectID); err != nil {
 		return nil, err
 	}
-	return offers, nil
+	return savedSupplierOfferRowsToDomain(rows)
 }
 
 func (r *ProjectRepository) LinkSupplierOfferToComponent(ctx context.Context, offerID, componentID string) error {
@@ -638,17 +780,21 @@ func (r *ProjectRepository) LinkSupplierOfferToComponent(ctx context.Context, of
 }
 
 func (r *ProjectRepository) GetSavedSupplierOffer(ctx context.Context, offerID string) (domain.SavedSupplierOffer, error) {
-	var o domain.SavedSupplierOffer
-	if err := r.store.db.GetContext(ctx, &o, `
+	var row savedSupplierOfferRow
+	if err := r.store.db.GetContext(ctx, &row, `
 		select id, project_id, requirement_id, provider, provider_part_id, product_url,
-			image_url, datasheet_url, has_symbol, has_footprint, has_datasheet, manufacturer, mpn, description, package, stock, moq, unit_price, currency,
+			image_url, datasheet_url, has_symbol, has_footprint, has_datasheet, manufacturer, mpn, description, package, stock, moq, unit_price, currency, lifecycle, raw_json,
 			asset_probe_state, asset_probe_error, probe_completed_at, linked_component_id, captured_at, created_at
 		from saved_supplier_offers
 		where id = $1
 	`, offerID); err != nil {
 		return domain.SavedSupplierOffer{}, domain.ErrNotFound{ID: offerID}
 	}
-	return o, nil
+	offer, err := row.toDomain()
+	if err != nil {
+		return domain.SavedSupplierOffer{}, err
+	}
+	return offer, nil
 }
 
 func (r *ProjectRepository) UpdatePartCandidateComponent(ctx context.Context, candidateID string, componentID string, origin domain.CandidateOrigin) error {

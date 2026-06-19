@@ -315,14 +315,14 @@ func (s *Server) handleScanPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var vendorPartID, quantity string
+	var vendorPartID, quantity, manufacturer string
 	switch req.Vendor {
 	case sourcing.ProviderLCSC:
 		vendorPartID, quantity = parseLcscBarcode(req.RawValue)
 		log.Printf("[phone-intake] LCSC scan: partID=%s qty=%s", vendorPartID, quantity)
 	case sourcing.ProviderMouser:
-		vendorPartID, quantity = parseMouserBarcode(req.RawValue)
-		log.Printf("[phone-intake] Mouser scan: part=%s qty=%s", vendorPartID, quantity)
+		vendorPartID, quantity, manufacturer = parseMouserBarcode(req.RawValue)
+		log.Printf("[phone-intake] Mouser scan: part=%s qty=%s manufacturer=%s", vendorPartID, quantity, manufacturer)
 	case sourcing.ProviderDigiKey:
 		log.Printf("[phone-intake] DigiKey barcode parsing not supported format=%s", req.Format)
 		id := generateToken()
@@ -357,10 +357,10 @@ func (s *Server) handleScanPost(w http.ResponseWriter, r *http.Request) {
 
 	resp := ScanResponse{OK: true, ID: id, Quantity: quantity}
 
-	s.reporter.Emit(activity.NewPhoneEvent(activity.SeverityInfo, "scan-received", "Phone scan received", map[string]any{"vendor": req.Vendor, "format": req.Format, "rawValue": req.RawValue, "quantity": quantity}))
+	s.reporter.Emit(activity.NewPhoneEvent(activity.SeverityInfo, "scan-received", "Phone scan received", map[string]any{"vendor": req.Vendor, "format": req.Format, "rawValue": req.RawValue, "quantity": quantity, "manufacturer": manufacturer}))
 
 	if vendorPartID != "" {
-		offer, err := s.svc.LookupVendorPartID(r.Context(), req.Vendor, vendorPartID)
+		offer, err := s.svc.LookupVendorPartIDWithManufacturer(r.Context(), req.Vendor, vendorPartID, manufacturer)
 		if err != nil {
 			scan.Error = err.Error()
 			resp.ResolveError = err.Error()
@@ -368,7 +368,7 @@ func (s *Server) handleScanPost(w http.ResponseWriter, r *http.Request) {
 				Severity: activity.SeverityWarning,
 				Kind:     "lookup-failed",
 				Message:  "Vendor lookup failed",
-				Metadata: map[string]any{"vendor": req.Vendor, "partId": vendorPartID, "error": err.Error()},
+				Metadata: map[string]any{"vendor": req.Vendor, "partId": vendorPartID, "manufacturer": manufacturer, "error": err.Error()},
 			})
 		} else {
 			// Populate display data from the offer without touching the DB.
@@ -389,7 +389,7 @@ func (s *Server) handleScanPost(w http.ResponseWriter, r *http.Request) {
 			scan.Resolved = resolved
 			scan.Offer = &offer
 			resp.Resolved = resolved
-			s.reporter.Emit(activity.NewPhoneEvent(activity.SeveritySuccess, "lookup-succeeded", "Vendor lookup succeeded", map[string]any{"vendor": req.Vendor, "partId": vendorPartID, "mpn": offer.MPN}))
+			s.reporter.Emit(activity.NewPhoneEvent(activity.SeveritySuccess, "lookup-succeeded", "Vendor lookup succeeded", map[string]any{"vendor": req.Vendor, "partId": vendorPartID, "manufacturer": manufacturer, "mpn": offer.MPN, "offer": offer}))
 		}
 	} else {
 		scan.Error = "no part ID found in barcode"

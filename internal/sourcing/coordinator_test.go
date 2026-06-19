@@ -75,8 +75,8 @@ func TestCoordinator_CacheKeyIgnoresRequirementID(t *testing.T) {
 }
 
 func TestCoordinator_LookupVendorPartIDCacheKey_IsStable(t *testing.T) {
-	keyA := sourcing.LookupVendorPartIDCacheKey("Mouser", "abc-123", "fingerprint")
-	keyB := sourcing.LookupVendorPartIDCacheKey("mouser", "ABC-123", "fingerprint")
+	keyA := sourcing.LookupVendorPartIDCacheKey("Mouser", "abc-123", "", "fingerprint")
+	keyB := sourcing.LookupVendorPartIDCacheKey("mouser", "ABC-123", "", "fingerprint")
 	if keyA != keyB {
 		t.Fatalf("expected equivalent lookup cache keys, got %q and %q", keyA, keyB)
 	}

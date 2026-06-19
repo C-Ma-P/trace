@@ -259,16 +259,7 @@ func (s *Service) ImportSupplierOffer(ctx context.Context, requirementID string,
 // the offer's manufacturer + MPN (case-insensitive exact match). If a match is
 // found in the same category, it is reused. Otherwise a new component is created.
 func (s *Service) findOrCreateComponentFromOffer(ctx context.Context, category domain.Category, offer domain.SavedSupplierOffer) (domain.Component, bool, error) {
-	supplierOffer := sourcing.SupplierOffer{
-		Provider:           offer.Provider,
-		Manufacturer:       offer.Manufacturer,
-		MPN:                offer.MPN,
-		SupplierPartNumber: offer.ProviderPartID,
-		Description:        offer.Description,
-		Package:            offer.Package,
-	}
-	attrs := sourcing.ComponentAttributesFromOffer(category, supplierOffer)
-	return s.findOrCreateComponentWithSupplierAttrs(ctx, category, offer.Manufacturer, offer.MPN, offer.Package, offer.Description, attrs)
+	return s.resolveComponentFromSupplierOffer(ctx, category, SupplierOfferFromSavedSupplierOffer(offer))
 }
 
 func (s *Service) maybeEnrichSavedSupplierOffer(ctx context.Context, offer *domain.SavedSupplierOffer) {
@@ -281,47 +272,8 @@ func (s *Service) maybeEnrichSavedSupplierOffer(ctx context.Context, offer *doma
 		return
 	}
 
-	probed, _ := coord.ProbeOffer(ctx, sourcing.SupplierOffer{
-		Provider:           offer.Provider,
-		Manufacturer:       offer.Manufacturer,
-		MPN:                offer.MPN,
-		SupplierPartNumber: offer.ProviderPartID,
-		Description:        offer.Description,
-		Package:            offer.Package,
-		Stock:              offer.Stock,
-		MOQ:                offer.MOQ,
-		UnitPrice:          offer.UnitPrice,
-		ProductURL:         offer.ProductURL,
-		DatasheetURL:       offer.DatasheetURL,
-		ImageURL:           offer.ImageURL,
-		HasSymbol:          offer.HasSymbol,
-		HasFootprint:       offer.HasFootprint,
-		HasDatasheet:       offer.HasDatasheet,
-		AssetProbeState:    sourcing.AssetProbeState(offer.AssetProbeState),
-		AssetProbeError:    offer.AssetProbeError,
-	})
-
-	offer.HasSymbol = probed.HasSymbol
-	offer.HasFootprint = probed.HasFootprint
-	offer.HasDatasheet = probed.HasDatasheet
-	if probed.ProductURL != "" {
-		offer.ProductURL = probed.ProductURL
-	}
-	if probed.ImageURL != "" {
-		offer.ImageURL = probed.ImageURL
-	}
-	if probed.DatasheetURL != "" {
-		offer.DatasheetURL = probed.DatasheetURL
-	}
-	if probed.Stock != nil {
-		offer.Stock = probed.Stock
-	}
-	if probed.MOQ != nil {
-		offer.MOQ = probed.MOQ
-	}
-	if probed.UnitPrice != nil {
-		offer.UnitPrice = probed.UnitPrice
-	}
+	probed, _ := coord.ProbeOffer(ctx, SupplierOfferFromSavedSupplierOffer(*offer))
+	MergeSavedSupplierOfferFromSupplierOffer(offer, probed)
 	if probed.AssetProbeState != "" {
 		offer.AssetProbeState = string(probed.AssetProbeState)
 	} else {

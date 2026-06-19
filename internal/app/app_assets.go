@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,7 +15,6 @@ import (
 	"github.com/C-Ma-P/trace/internal/domain"
 	"github.com/C-Ma-P/trace/internal/domain/registry"
 	"github.com/C-Ma-P/trace/internal/ingest"
-	easyedaprovider "github.com/C-Ma-P/trace/internal/providers/easyeda"
 )
 
 func (a *App) CreateComponentAsset(req CreateComponentAssetInput) (ComponentAssetResponse, error) {
@@ -54,6 +54,17 @@ func (a *App) ListComponentAssets(componentID string) ([]ComponentAssetResponse,
 		out[i] = assetToResponse(asset)
 	}
 	return out, nil
+}
+
+func (a *App) GetComponentAsset(assetID string) (ComponentAssetResponse, error) {
+	if err := a.checkReady(); err != nil {
+		return ComponentAssetResponse{}, err
+	}
+	asset, err := a.svc.GetComponentAsset(context.Background(), assetID)
+	if err != nil {
+		return ComponentAssetResponse{}, err
+	}
+	return assetToResponse(asset), nil
 }
 
 func (a *App) SelectComponentAsset(componentID, assetType, assetID string) error {
@@ -285,9 +296,6 @@ func (a *App) ImportEasyEDAAssets(input ImportEasyEDAInput) (ImportEasyEDARespon
 	if err := a.checkReady(); err != nil {
 		return ImportEasyEDAResponse{}, err
 	}
-	if a.easyeda == nil {
-		return ImportEasyEDAResponse{}, fmt.Errorf("EasyEDA provider not available")
-	}
 
 	lcscID := input.LCSCID
 	if lcscID == "" {
@@ -302,56 +310,12 @@ func (a *App) ImportEasyEDAAssets(input ImportEasyEDAInput) (ImportEasyEDARespon
 		lcscID = *attr.Text
 	}
 
-	ctx := context.Background()
-	existing, err := a.svc.ListComponentAssets(ctx, input.ComponentID)
-	if err != nil {
-		return ImportEasyEDAResponse{}, fmt.Errorf("listing existing assets: %w", err)
-	}
-	skip, warnings := shouldSkipEasyEDAImport(existing)
-	hasSymbol, hasFootprint, has3D, symbolAssetID, footprintAssetID, model3DAssetID := summarizeExistingEasyEDAAssets(existing)
-	if skip {
-		selectWarnings := a.autoSelectExistingEasyEDAAssets(ctx, input.ComponentID, existing)
-		warnings = append(warnings, selectWarnings...)
-		return ImportEasyEDAResponse{
-			LCSCID:            lcscID,
-			SymbolImported:    hasSymbol,
-			FootprintImported: hasFootprint,
-			Model3DImported:   has3D,
-			SymbolAssetID:     symbolAssetID,
-			FootprintAssetID:  footprintAssetID,
-			Model3DAssetID:    model3DAssetID,
-			Warnings:          warnings,
-			Errors:            []string{},
-		}, nil
-	}
-
-	result, err := a.easyeda.ImportComponentAssets(ctx, easyedaprovider.ImportRequest{
-		ComponentID: input.ComponentID,
-		LCSCID:      lcscID,
-	})
+	result, err := a.svc.ImportEasyEDAAssets(context.Background(), input.ComponentID, lcscID)
 	if err != nil {
 		return ImportEasyEDAResponse{}, err
 	}
-	if len(warnings) > 0 {
-		result.Warnings = append(warnings, result.Warnings...)
-	}
-	if result.SymbolAssetID != "" {
-		if selErr := a.svc.SetSelectedComponentAsset(ctx, input.ComponentID, domain.AssetTypeSymbol, result.SymbolAssetID); selErr != nil {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("auto-select symbol: %v", selErr))
-		}
-	}
-	if result.FootprintAssetID != "" {
-		if selErr := a.svc.SetSelectedComponentAsset(ctx, input.ComponentID, domain.AssetTypeFootprint, result.FootprintAssetID); selErr != nil {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("auto-select footprint: %v", selErr))
-		}
-	}
-	if result.Model3DAssetID != "" {
-		if selErr := a.svc.SetSelectedComponentAsset(ctx, input.ComponentID, domain.AssetType3DModel, result.Model3DAssetID); selErr != nil {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("auto-select 3d model: %v", selErr))
-		}
-	}
 
-	warnings = result.Warnings
+	warnings := result.Warnings
 	if warnings == nil {
 		warnings = []string{}
 	}
@@ -433,46 +397,6 @@ func summarizeExistingEasyEDAAssets(existing []domain.ComponentAsset) (bool, boo
 	return hasSymbol, hasFootprint, has3DModel, symbolID, footprintID, model3DID
 }
 
-func (a *App) autoSelectExistingEasyEDAAssets(ctx context.Context, componentID string, existing []domain.ComponentAsset) []string {
-	detail, err := a.svc.GetComponentWithAssets(ctx, componentID)
-	if err != nil {
-		return []string{fmt.Sprintf("unable to verify selected assets: %v", err)}
-	}
-
-	var warnings []string
-	if detail.SelectedSymbolAsset == nil {
-		if assetID := firstExistingAssetID(existing, domain.AssetTypeSymbol); assetID != "" {
-			if err := a.svc.SetSelectedComponentAsset(ctx, componentID, domain.AssetTypeSymbol, assetID); err != nil {
-				warnings = append(warnings, fmt.Sprintf("auto-select symbol: %v", err))
-			}
-		}
-	}
-	if detail.SelectedFootprintAsset == nil {
-		if assetID := firstExistingAssetID(existing, domain.AssetTypeFootprint); assetID != "" {
-			if err := a.svc.SetSelectedComponentAsset(ctx, componentID, domain.AssetTypeFootprint, assetID); err != nil {
-				warnings = append(warnings, fmt.Sprintf("auto-select footprint: %v", err))
-			}
-		}
-	}
-	if detail.Selected3DModelAsset == nil {
-		if assetID := firstExistingAssetID(existing, domain.AssetType3DModel); assetID != "" {
-			if err := a.svc.SetSelectedComponentAsset(ctx, componentID, domain.AssetType3DModel, assetID); err != nil {
-				warnings = append(warnings, fmt.Sprintf("auto-select 3d model: %v", err))
-			}
-		}
-	}
-	return warnings
-}
-
-func firstExistingAssetID(existing []domain.ComponentAsset, assetType domain.AssetType) string {
-	for _, asset := range existing {
-		if asset.Source == "easyeda" && asset.AssetType == assetType {
-			return asset.ID
-		}
-	}
-	return ""
-}
-
 // ReadAssetFile reads the file contents of a component asset and returns them
 // as base64-encoded data. This is used by the frontend to load asset files
 // (e.g. STEP models) that live in managed storage.
@@ -486,24 +410,9 @@ func (a *App) ReadAssetFile(assetID string) (ReadAssetFileResponse, error) {
 		return ReadAssetFileResponse{}, fmt.Errorf("asset lookup: %w", err)
 	}
 
-	filePath := asset.URLOrPath
-	if filePath == "" {
-		return ReadAssetFileResponse{}, fmt.Errorf("asset has no file path")
-	}
-
-	// Security: ensure the path is within thr managed assets directory.
-	// Reject absolute paths that escape the expected storage root.
-	cleanPath := filepath.Clean(filePath)
-	if !filepath.IsAbs(cleanPath) {
-		return ReadAssetFileResponse{}, fmt.Errorf("asset path is not absolute")
-	}
-	home, err := os.UserHomeDir()
+	cleanPath, err := managedAssetPath(asset.URLOrPath)
 	if err != nil {
-		return ReadAssetFileResponse{}, fmt.Errorf("resolve home dir: %w", err)
-	}
-	assetsRoot := filepath.Join(home, ".trace", "assets")
-	if !strings.HasPrefix(cleanPath, assetsRoot+string(filepath.Separator)) {
-		return ReadAssetFileResponse{}, fmt.Errorf("asset path is outside managed storage")
+		return ReadAssetFileResponse{}, err
 	}
 
 	data, err := os.ReadFile(cleanPath)
@@ -515,4 +424,60 @@ func (a *App) ReadAssetFile(assetID string) (ReadAssetFileResponse, error) {
 		Data:     base64.StdEncoding.EncodeToString(data),
 		Filename: filepath.Base(cleanPath),
 	}, nil
+}
+
+func (a *App) ResolveComponentAssetOpenTarget(assetID string) (string, error) {
+	if err := a.checkReady(); err != nil {
+		return "", err
+	}
+	asset, err := a.svc.GetComponentAsset(context.Background(), assetID)
+	if err != nil {
+		return "", fmt.Errorf("asset lookup: %w", err)
+	}
+	return resolveComponentAssetOpenTarget(asset)
+}
+
+func resolveComponentAssetOpenTarget(asset domain.ComponentAsset) (string, error) {
+	target := strings.TrimSpace(asset.URLOrPath)
+	if target == "" {
+		return "", fmt.Errorf("asset has no path or URL")
+	}
+	if strings.ContainsAny(target, "\r\n") {
+		return "", fmt.Errorf("asset target contains invalid characters")
+	}
+	if asset.AssetType != domain.AssetTypeDatasheet {
+		return "", fmt.Errorf("asset %q is not a datasheet", asset.ID)
+	}
+	if parsed, err := url.Parse(target); err == nil && parsed.Host != "" {
+		if parsed.User != nil {
+			return "", fmt.Errorf("asset URL credentials are not allowed")
+		}
+		switch parsed.Scheme {
+		case "http", "https":
+			return parsed.String(), nil
+		default:
+			return "", fmt.Errorf("asset URL scheme %q is not supported", parsed.Scheme)
+		}
+	}
+	return managedAssetPath(target)
+}
+
+func managedAssetPath(filePath string) (string, error) {
+	trimmed := strings.TrimSpace(filePath)
+	if trimmed == "" {
+		return "", fmt.Errorf("asset has no file path")
+	}
+	cleanPath := filepath.Clean(trimmed)
+	if !filepath.IsAbs(cleanPath) {
+		return "", fmt.Errorf("asset path is not absolute")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve home dir: %w", err)
+	}
+	assetsRoot := filepath.Join(home, ".trace", "assets")
+	if cleanPath != assetsRoot && !strings.HasPrefix(cleanPath, assetsRoot+string(filepath.Separator)) {
+		return "", fmt.Errorf("asset path is outside managed storage")
+	}
+	return cleanPath, nil
 }

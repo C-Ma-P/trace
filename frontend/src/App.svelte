@@ -3,6 +3,7 @@
   import { Window } from '@wailsio/runtime';
   import Sidebar from './lib/Sidebar.svelte';
   import ComponentsWorkspace from './lib/components/ComponentsWorkspace.svelte';
+  import DatasheetWindow from './lib/components/DatasheetWindow.svelte';
   import LauncherWorkspace from './lib/launcher/LauncherWorkspace.svelte';
   import PreferencesWorkspace from './lib/preferences/PreferencesWorkspace.svelte';
   import ProjectsWorkspace from './lib/projects/ProjectsWorkspace.svelte';
@@ -11,13 +12,14 @@
   import ActivityPane from './lib/ui/ActivityPane.svelte';
   import { openProjectWindow, openProjectWindowKeepLauncher } from './lib/windowService';
 
-  type WindowMode = 'launcher' | 'project' | 'preferences';
+  type WindowMode = 'launcher' | 'project' | 'preferences' | 'datasheet';
   type StartupState = 'ready' | 'failed' | 'unknown';
 
   const params = new URLSearchParams(window.location.search);
   const mode = (params.get('mode') as WindowMode) || 'launcher';
   const initialProjectId = params.get('projectId');
   const initialComponentId = params.get('componentId');
+  const initialAssetId = params.get('assetId');
 
   function parseStartupState(value: string | null): StartupState {
     if (value === 'ready' || value === 'failed') {
@@ -144,6 +146,8 @@
     />
   {:else if mode === 'preferences'}
     <PreferencesWorkspace projectId={initialProjectId ?? null} />
+  {:else if mode === 'datasheet'}
+    <DatasheetWindow assetId={initialAssetId} />
   {:else}
     <div class="app-layout">
       <Sidebar bind:currentSection />

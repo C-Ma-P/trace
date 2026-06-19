@@ -187,6 +187,20 @@ func (w *WindowService) SetLauncherView(view string) error {
 	return w.controller.SetLauncherView(view)
 }
 
+func (w *WindowService) OpenDatasheetWindow(assetID string) error {
+	if w.controller == nil {
+		return fmt.Errorf("window controller not available")
+	}
+	return w.controller.OpenDatasheetWindow(assetID)
+}
+
+func (w *WindowService) OpenAssetExternally(assetID string) error {
+	if w.controller == nil {
+		return fmt.Errorf("window controller not available")
+	}
+	return w.controller.OpenAssetExternally(assetID)
+}
+
 func initService(dsn string, emitter activity.Emitter) (*service.Service, *assetsearch.Service, *ingest.Service, *easyedaprovider.Service, *sqlx.DB, error) {
 	ctx := context.Background()
 
@@ -263,6 +277,7 @@ func initService(dsn string, emitter activity.Emitter) (*service.Service, *asset
 	assetSearchSvc := assetsearch.NewService(reg, compRepo, assetRepo, ingestSvc)
 
 	easyedaSvc := easyedaprovider.NewService(ingestSvc)
+	svc.SetEasyEDA(easyedaSvc)
 
 	startupLog("service construction complete")
 	return svc, assetSearchSvc, ingestSvc, easyedaSvc, db, nil

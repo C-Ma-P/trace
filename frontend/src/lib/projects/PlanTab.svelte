@@ -18,6 +18,7 @@
     type RequirementSelectedPart,
     type SourceRequirementResult,
     type SupplierOffer as SupplierOfferType,
+    type SupplierOfferSnapshotInput,
     type SupplierProviderStatus,
     type CategoryInfo,
     type PartCandidate,
@@ -328,6 +329,31 @@
     }
   }
 
+  function snapshotInputFromOffer(offer: SupplierOfferType, currency: string): SupplierOfferSnapshotInput {
+    return {
+      provider: offer.provider,
+      providerPartId: offer.supplierPartNumber,
+      productUrl: offer.productUrl,
+      imageUrl: offer.imageUrl,
+      datasheetUrl: offer.datasheetUrl,
+      hasSymbol: offer.hasSymbol,
+      hasFootprint: offer.hasFootprint,
+      hasDatasheet: offer.hasDatasheet,
+      manufacturer: offer.manufacturer,
+      mpn: offer.mpn,
+      description: offer.description,
+      package: offer.package,
+      stock: offer.stock,
+      moq: offer.moq,
+      unitPrice: offer.unitPrice,
+      currency,
+      lifecycle: offer.lifecycle,
+      raw: offer.raw,
+      assetProbeState: offer.assetProbeState,
+      assetProbeError: offer.assetProbeError,
+    };
+  }
+
   async function handleAddProviderCandidate(requirementId: string, offer: SupplierOfferType, currency: string, setPreferred: boolean) {
     const key = `provider-${requirementId}-${offer.supplierPartNumber}`;
     if (actionInProgress[key]) return;
@@ -337,21 +363,7 @@
       const persistedOffer = getProbedOffer(offer);
       await addProviderCandidate({
         requirementId,
-        provider: persistedOffer.provider,
-        providerPartId: persistedOffer.supplierPartNumber,
-        productUrl: persistedOffer.productUrl,
-        imageUrl: persistedOffer.imageUrl,
-        datasheetUrl: persistedOffer.datasheetUrl,
-        manufacturer: persistedOffer.manufacturer,
-        mpn: persistedOffer.mpn,
-        description: persistedOffer.description,
-        package: persistedOffer.package,
-        stock: persistedOffer.stock,
-        moq: persistedOffer.moq,
-        unitPrice: persistedOffer.unitPrice,
-        currency,
-        assetProbeState: persistedOffer.assetProbeState,
-        assetProbeError: persistedOffer.assetProbeError,
+        ...snapshotInputFromOffer(persistedOffer, currency),
         setPreferred,
       });
       await runPlan();

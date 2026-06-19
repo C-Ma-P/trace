@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/C-Ma-P/trace/internal/electronics/specparse"
 	mouser "github.com/PatrickWalther/go-mouser"
 )
 
@@ -96,6 +97,21 @@ func (p *MouserProvider) LookupByPartNumber(ctx context.Context, partNumber stri
 	return normalizeMouserPart(result.Parts[0]), nil
 }
 
+func (p *MouserProvider) LookupByPartNumberAndManufacturer(ctx context.Context, partNumber, manufacturer string) (SupplierOffer, error) {
+	if !p.Enabled() {
+		return SupplierOffer{}, fmt.Errorf("Mouser provider not configured")
+	}
+	manufacturer = strings.TrimSpace(manufacturer)
+	if manufacturer == "" {
+		return p.LookupByPartNumber(ctx, partNumber)
+	}
+	part, err := p.client.Search.PartDetailsWithManufacturer(ctx, partNumber, manufacturer)
+	if err != nil {
+		return SupplierOffer{}, err
+	}
+	return normalizeMouserPart(*part), nil
+}
+
 func (p *MouserProvider) FriendlyError(err error) string {
 	var apiErrs mouser.APIErrors
 	if errors.As(err, &apiErrs) && len(apiErrs) > 0 {
@@ -176,13 +192,13 @@ func packageFromMouserAttributes(attributes []mouser.ProductAttribute) string {
 		value := strings.TrimSpace(attribute.AttributeValue)
 		switch {
 		case strings.EqualFold(name, "Package / Case") || strings.EqualFold(name, "Supplier Device Package"):
-			return normalizePackageValue(value)
+			return specparse.NormalizePackage(value)
 		case strings.EqualFold(name, "Case Code - in") || strings.EqualFold(name, "Case Code - mm"):
-			if parsed := normalizePackageValue(value); parsed != "" {
+			if parsed := specparse.NormalizePackage(value); parsed != "" {
 				best = parsed
 			}
 		case strings.EqualFold(name, "Package"):
-			if parsed := normalizePackageValue(value); parsed != "" {
+			if parsed := specparse.NormalizePackage(value); parsed != "" {
 				best = parsed
 			}
 		case strings.EqualFold(name, "Packaging"):

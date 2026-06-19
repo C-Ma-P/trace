@@ -229,6 +229,10 @@ func dedupeOffers(offers []SupplierOffer) []SupplierOffer {
 }
 
 func (s *Service) LookupByVendorPartID(ctx context.Context, vendor, partID string) (SupplierOffer, error) {
+	return s.LookupByVendorPartIDWithManufacturer(ctx, vendor, partID, "")
+}
+
+func (s *Service) LookupByVendorPartIDWithManufacturer(ctx context.Context, vendor, partID, manufacturer string) (SupplierOffer, error) {
 	for _, p := range s.providers {
 		if !strings.EqualFold(p.Name(), vendor) || !p.Enabled() {
 			continue
@@ -237,9 +241,22 @@ func (s *Service) LookupByVendorPartID(ctx context.Context, vendor, partID strin
 		case *LCSCProvider:
 			return v.LookupByPartCode(ctx, partID)
 		case *MouserProvider:
+			if strings.TrimSpace(manufacturer) != "" {
+				return v.LookupByPartNumberAndManufacturer(ctx, partID, manufacturer)
+			}
 			return v.LookupByPartNumber(ctx, partID)
 		case *DigiKeyProvider:
 			return v.LookupByPartNumber(ctx, partID)
+		case ManufacturerPartLookupProvider:
+			if strings.TrimSpace(manufacturer) != "" {
+				return v.LookupByPartNumberAndManufacturer(ctx, partID, manufacturer)
+			}
+			if generic, ok := p.(VendorPartLookupProvider); ok {
+				return generic.LookupByVendorPartID(ctx, vendor, partID)
+			}
+			return SupplierOffer{}, fmt.Errorf("provider %q requires manufacturer-aware lookup path", vendor)
+		case VendorPartLookupProvider:
+			return v.LookupByVendorPartID(ctx, vendor, partID)
 		default:
 			return SupplierOffer{}, fmt.Errorf("provider %q does not support barcode lookup", vendor)
 		}

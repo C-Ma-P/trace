@@ -33,3 +33,11 @@ export function pickAssetDir(): Promise<string> {
 export function setLauncherView(view: 'launcher' | 'kicad-import'): Promise<void> {
   return call('SetLauncherView', view);
 }
+
+export function openDatasheetWindow(assetId: string): Promise<void> {
+  return call('OpenDatasheetWindow', assetId);
+}
+
+export function openAssetExternally(assetId: string): Promise<void> {
+  return call('OpenAssetExternally', assetId);
+}

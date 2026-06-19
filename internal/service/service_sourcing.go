@@ -10,11 +10,15 @@ import (
 )
 
 func (s *Service) LookupVendorPartID(ctx context.Context, vendor, partID string) (sourcing.SupplierOffer, error) {
+	return s.LookupVendorPartIDWithManufacturer(ctx, vendor, partID, "")
+}
+
+func (s *Service) LookupVendorPartIDWithManufacturer(ctx context.Context, vendor, partID, manufacturer string) (sourcing.SupplierOffer, error) {
 	coord, err := s.resolveSourcingCoordinator(ctx)
 	if err != nil {
 		return sourcing.SupplierOffer{}, err
 	}
-	return coord.LookupByVendorPartID(ctx, vendor, partID)
+	return coord.LookupByVendorPartIDWithManufacturer(ctx, vendor, partID, manufacturer)
 }
 
 func (s *Service) resolveSourcingCoordinator(ctx context.Context) (*sourcing.Coordinator, error) {
@@ -66,13 +70,7 @@ func (s *Service) SourceRequirementFromProvider(ctx context.Context, requirement
 
 func (s *Service) ResolveComponentFromOffer(ctx context.Context, offer sourcing.SupplierOffer) (domain.Component, error) {
 	category := sourcing.MapOfferCategory(offer)
-	attrs := sourcing.ComponentAttributesFromOffer(category, offer)
-	packageName := firstSupplierPackage(attrs, offer.Package)
-	component, _, err := s.findOrCreateComponentWithSupplierAttrs(ctx, category, offer.Manufacturer, offer.MPN, packageName, offer.Description, attrs)
-	if err != nil {
-		return domain.Component{}, err
-	}
-	component, err = s.maybeAttachSupplierDatasheet(ctx, component, offer)
+	component, _, err := s.resolveComponentFromSupplierOffer(ctx, category, offer)
 	if err != nil {
 		return domain.Component{}, err
 	}

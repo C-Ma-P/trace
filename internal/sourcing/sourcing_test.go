@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"strings"
 	"testing"
 
@@ -228,6 +229,297 @@ func TestComponentAttributesFromOffer_Resistor_FuzzyMouserFieldsAndDescription(t
 	assertTextAttr(t, idx, registry.AttrPackage, "0603")
 }
 
+func TestComponentAttributesFromOffer_Resistor_ProviderRawFieldVariants(t *testing.T) {
+	tests := []struct {
+		name       string
+		offer      SupplierOffer
+		resistance float64
+		power      float64
+		pkg        string
+	}{
+		{
+			name: "Mouser raw keys",
+			offer: SupplierOffer{
+				Provider:    ProviderMouser,
+				Description: "Res Thick Film 0603 4K7 1% 100mW 100 ppm/C",
+				Package:     "Cut Tape",
+				Raw: map[string]string{
+					"category":             "Chip Resistors",
+					"Ohms":                 "4K7",
+					"Resistance Tolerance": "1%",
+					"Power (Watts)":        "100mW",
+					"TCR (ppm/C)":          "100 ppm/C",
+					"Case Code - in":       "0603",
+					"Technology":           "Thick Film",
+				},
+			},
+			resistance: 4700,
+			power:      0.1,
+			pkg:        "0603",
+		},
+		{
+			name: "LCSC raw keys",
+			offer: SupplierOffer{
+				Provider:    ProviderLCSC,
+				Description: "Chip resistor 0402 0R 1% 1/16 W",
+				Package:     "Reel",
+				Raw: map[string]string{
+					"catalog":       "Chip Resistor - Surface Mount",
+					"Resistance":    "0R",
+					"Tolerance":     "1%",
+					"Power":         "1/16 W",
+					"EncapStandard": "0402",
+				},
+			},
+			resistance: 0,
+			power:      0.0625,
+			pkg:        "0402",
+		},
+		{
+			name: "DigiKey raw keys",
+			offer: SupplierOffer{
+				Provider:    ProviderDigiKey,
+				Description: "Resistor 0603 10 kOhms 5% 1/10W",
+				Package:     "Mouse Reel",
+				Raw: map[string]string{
+					"Resistance":              "10 kOhms",
+					"Tolerance":               "5%",
+					"Power (Watts)":           "1/10W",
+					"Package / Case":          "0603",
+					"Supplier Device Package": "0603",
+				},
+			},
+			resistance: 10000,
+			power:      0.1,
+			pkg:        "0603",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			attrs := ComponentAttributesFromOffer(domain.CategoryResistor, tt.offer)
+			idx := attrsByKey(attrs)
+
+			assertNumberAttr(t, idx, registry.AttrResistanceOhms, tt.resistance, "ohm")
+			assertNumberAttr(t, idx, registry.AttrPowerW, tt.power, "W")
+			assertTextAttr(t, idx, registry.AttrPackage, tt.pkg)
+		})
+	}
+}
+
+func TestComponentAttributesFromOffer_Resistor_EdgeValueFormats(t *testing.T) {
+	tests := []struct {
+		name           string
+		description    string
+		raw            map[string]string
+		wantResistance float64
+		wantPower      float64
+		wantPackage    string
+	}{
+		{
+			name:        "comma separated resistance",
+			description: "Resistor 0402 10,000 Ohms 1% 100mW",
+			raw: map[string]string{
+				"Resistance":     "10,000 Ohms",
+				"Tolerance":      "1%",
+				"Power Rating":   "100mW",
+				"Package / Case": "Cut Tape 0402",
+			},
+			wantResistance: 10000,
+			wantPower:      0.1,
+			wantPackage:    "0402",
+		},
+		{
+			name:        "mega ohm text form",
+			description: "Resistor reel 0603 1 MOhms 5% 1/10W",
+			raw: map[string]string{
+				"Resistance":     "1 MOhms",
+				"Tolerance":      "5%",
+				"Power Rating":   "1/10W",
+				"Package / Case": "0603",
+			},
+			wantResistance: 1e6,
+			wantPower:      0.1,
+			wantPackage:    "0603",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			attrs := ComponentAttributesFromOffer(domain.CategoryResistor, SupplierOffer{
+				Provider:    ProviderMouser,
+				Description: tt.description,
+				Package:     "Reel",
+				Raw:         tt.raw,
+			})
+			idx := attrsByKey(attrs)
+
+			assertNumberAttr(t, idx, registry.AttrResistanceOhms, tt.wantResistance, "ohm")
+			assertNumberAttr(t, idx, registry.AttrPowerW, tt.wantPower, "W")
+			assertTextAttr(t, idx, registry.AttrPackage, tt.wantPackage)
+		})
+	}
+}
+
+func TestComponentAttributesFromOffer_Capacitor_ProviderRawFieldVariants(t *testing.T) {
+	tests := []struct {
+		name            string
+		offer           SupplierOffer
+		wantCapacitance float64
+		wantTolerance   float64
+		wantVoltage     float64
+		wantDielectric  string
+		wantType        string
+		wantPackage     string
+	}{
+		{
+			name: "Mouser MLCC fields",
+			offer: SupplierOffer{
+				Provider:    ProviderMouser,
+				Description: "Multilayer Ceramic Capacitors MLCC - SMD/SMT 0.1uF 16V X7R 10% 0402",
+				Package:     "Reel",
+				Raw: map[string]string{
+					"Capacitance":             "0.1 uF",
+					"Tolerance":               "±10%",
+					"Voltage - Rated":         "16V",
+					"Temperature Coefficient": "X7R",
+					"Case Code - in":          "0402",
+				},
+			},
+			wantCapacitance: 100e-9,
+			wantTolerance:   10,
+			wantVoltage:     16,
+			wantDielectric:  "X7R",
+			wantType:        "MLCC",
+			wantPackage:     "0402",
+		},
+		{
+			name: "LCSC ceramic fields",
+			offer: SupplierOffer{
+				Provider:    ProviderLCSC,
+				Description: "Ceramic capacitor 22pF 50V NP0 0402",
+				Package:     "Tape",
+				Raw: map[string]string{
+					"Capacitance":   "22pF",
+					"Tolerance":     "5%",
+					"Rated Voltage": "50V",
+					"EncapStandard": "0402",
+				},
+			},
+			wantCapacitance: 22e-12,
+			wantTolerance:   5,
+			wantVoltage:     50,
+			wantDielectric:  "NP0",
+			wantType:        "Ceramic",
+			wantPackage:     "0402",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			attrs := ComponentAttributesFromOffer(domain.CategoryCapacitor, tt.offer)
+			idx := attrsByKey(attrs)
+			assertNumberAttr(t, idx, registry.AttrCapacitanceF, tt.wantCapacitance, "F")
+			assertNumberAttr(t, idx, registry.AttrTolerancePercent, tt.wantTolerance, "percent")
+			assertNumberAttr(t, idx, registry.AttrVoltageV, tt.wantVoltage, "V")
+			assertTextAttr(t, idx, registry.AttrDielectric, tt.wantDielectric)
+			assertTextAttr(t, idx, registry.AttrCapacitorType, tt.wantType)
+			assertTextAttr(t, idx, registry.AttrPackage, tt.wantPackage)
+		})
+	}
+}
+
+func TestComponentAttributesFromOffer_Inductor_ProviderRawFieldVariants(t *testing.T) {
+	tests := []struct {
+		name           string
+		offer          SupplierOffer
+		wantInductance float64
+		wantTolerance  float64
+		wantCurrent    float64
+		wantDCR        float64
+		wantType       string
+		wantPackage    string
+	}{
+		{
+			name: "Mouser shielded inductor fields",
+			offer: SupplierOffer{
+				Provider:    ProviderMouser,
+				Description: "Shielded power inductor 10uH 20% 1.2A 1210",
+				Package:     "Reel",
+				Raw: map[string]string{
+					"Inductance":            "10 uH",
+					"Tolerance":             "20%",
+					"Current Rating (Amps)": "1.2A",
+					"DC Resistance (DCR)":   "90 mOhms Max",
+					"Case Code - in":        "1210",
+				},
+			},
+			wantInductance: 10e-6,
+			wantTolerance:  20,
+			wantCurrent:    1.2,
+			wantDCR:        0.09,
+			wantType:       "Shielded",
+			wantPackage:    "1210",
+		},
+		{
+			name: "DigiKey wirewound fields",
+			offer: SupplierOffer{
+				Provider:    ProviderDigiKey,
+				Description: "Wirewound inductor 4.7uH 10% 2A 0805",
+				Package:     "Cut Tape",
+				Raw: map[string]string{
+					"Inductance":      "4.7 uH",
+					"Tolerance":       "10%",
+					"Current - Rated": "2A",
+					"DCR":             "0.12 Ohm Max",
+					"Package / Case":  "0805",
+				},
+			},
+			wantInductance: 4.7e-6,
+			wantTolerance:  10,
+			wantCurrent:    2,
+			wantDCR:        0.12,
+			wantType:       "Wirewound",
+			wantPackage:    "0805",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			attrs := ComponentAttributesFromOffer(domain.CategoryInductor, tt.offer)
+			idx := attrsByKey(attrs)
+			assertNumberAttr(t, idx, registry.AttrInductanceH, tt.wantInductance, "H")
+			assertNumberAttr(t, idx, registry.AttrTolerancePercent, tt.wantTolerance, "percent")
+			assertNumberAttr(t, idx, registry.AttrCurrentA, tt.wantCurrent, "A")
+			assertNumberAttr(t, idx, registry.AttrDCROhms, tt.wantDCR, "ohm")
+			assertTextAttr(t, idx, registry.AttrInductorType, tt.wantType)
+			assertTextAttr(t, idx, registry.AttrPackage, tt.wantPackage)
+		})
+	}
+}
+
+func TestComponentAttributesFromOffer_FerriteBead_ProviderRawFieldVariants(t *testing.T) {
+	offer := SupplierOffer{
+		Provider:    ProviderDigiKey,
+		Description: "Ferrite bead 120 Ohms @ 100MHz 6A 0805",
+		Package:     "Tape & Reel",
+		Raw: map[string]string{
+			"Impedance @ Frequency": "120 Ohms @ 100MHz",
+			"Current Rating (Max)":  "6A",
+			"DC Resistance (DCR)":   "30 mOhms Max",
+			"Package / Case":        "0805",
+		},
+	}
+
+	attrs := ComponentAttributesFromOffer(domain.CategoryFerriteBead, offer)
+	idx := attrsByKey(attrs)
+
+	assertNumberAttr(t, idx, registry.AttrImpedanceOhms, 120, "ohm")
+	assertNumberAttr(t, idx, registry.AttrCurrentA, 6, "A")
+	assertNumberAttr(t, idx, registry.AttrDCROhm, 0.03, "ohm")
+	assertTextAttr(t, idx, registry.AttrPackage, "0805")
+}
+
 func attrsByKey(attrs []domain.AttributeValue) map[string]domain.AttributeValue {
 	idx := make(map[string]domain.AttributeValue, len(attrs))
 	for _, attr := range attrs {
@@ -242,7 +534,7 @@ func assertNumberAttr(t *testing.T, idx map[string]domain.AttributeValue, key st
 	if !ok || attr.Number == nil {
 		t.Fatalf("expected numeric attr %q, got %#v", key, attr)
 	}
-	if *attr.Number != want || attr.Unit != unit {
+	if !almostEqualFloat(*attr.Number, want) || attr.Unit != unit {
 		t.Fatalf("expected %s=%v %s, got %#v", key, want, unit, attr)
 	}
 }
@@ -256,6 +548,11 @@ func assertTextAttr(t *testing.T, idx map[string]domain.AttributeValue, key, wan
 	if *attr.Text != want {
 		t.Fatalf("expected %s=%q, got %#v", key, want, attr)
 	}
+}
+
+func almostEqualFloat(got, want float64) bool {
+	const epsilon = 1e-12
+	return math.Abs(got-want) <= epsilon
 }
 
 func TestRankOffers_PrefersExactMatches(t *testing.T) {

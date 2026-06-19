@@ -83,6 +83,16 @@ type stubProjectRepo struct {
 	getRequirementErr    error
 	resolvedReqID        string
 	resolution           *domain.RequirementResolution
+
+	partCandidates            []domain.ProjectPartCandidate
+	savedOffers               map[string]domain.SavedSupplierOffer
+	linkedOfferID             string
+	linkedComponentID         string
+	updatedCandidateID        string
+	updatedCandidateComponent string
+	updatedCandidateOrigin    domain.CandidateOrigin
+	preferredRequirementID    string
+	preferredCandidateID      string
 }
 
 func (s *stubProjectRepo) CreateProject(_ context.Context, p domain.Project) (domain.Project, error) {
@@ -148,45 +158,115 @@ func (s *stubProjectRepo) SetRequirementResolution(_ context.Context, reqID stri
 }
 
 func (s *stubProjectRepo) AddPartCandidate(_ context.Context, c domain.ProjectPartCandidate) (domain.ProjectPartCandidate, error) {
+	s.partCandidates = append(s.partCandidates, c)
 	return c, nil
 }
-func (s *stubProjectRepo) SetPreferredCandidate(_ context.Context, _, _ string) error {
+func (s *stubProjectRepo) SetPreferredCandidate(_ context.Context, requirementID, candidateID string) error {
+	s.preferredRequirementID = requirementID
+	s.preferredCandidateID = candidateID
+	for i := range s.partCandidates {
+		s.partCandidates[i].Preferred = s.partCandidates[i].ID == candidateID
+	}
 	return nil
 }
-func (s *stubProjectRepo) ClearPreferredCandidate(_ context.Context, _ string) error {
+func (s *stubProjectRepo) ClearPreferredCandidate(_ context.Context, requirementID string) error {
+	s.preferredRequirementID = requirementID
+	s.preferredCandidateID = ""
+	for i := range s.partCandidates {
+		s.partCandidates[i].Preferred = false
+	}
 	return nil
 }
 func (s *stubProjectRepo) GetPartCandidate(_ context.Context, id string) (domain.ProjectPartCandidate, error) {
+	for _, candidate := range s.partCandidates {
+		if candidate.ID == id {
+			return candidate, nil
+		}
+	}
 	return domain.ProjectPartCandidate{ID: id}, nil
 }
 func (s *stubProjectRepo) RemovePartCandidate(_ context.Context, _ string) error {
 	return nil
 }
-func (s *stubProjectRepo) ListPartCandidates(_ context.Context, _ string) ([]domain.ProjectPartCandidate, error) {
-	return nil, nil
+func (s *stubProjectRepo) ListPartCandidates(_ context.Context, requirementID string) ([]domain.ProjectPartCandidate, error) {
+	if requirementID == "" {
+		return append([]domain.ProjectPartCandidate(nil), s.partCandidates...), nil
+	}
+	filtered := make([]domain.ProjectPartCandidate, 0, len(s.partCandidates))
+	for _, candidate := range s.partCandidates {
+		if candidate.RequirementID == requirementID {
+			filtered = append(filtered, candidate)
+		}
+	}
+	return filtered, nil
 }
-func (s *stubProjectRepo) ListPartCandidatesByProject(_ context.Context, _ string) ([]domain.ProjectPartCandidate, error) {
-	return nil, nil
+func (s *stubProjectRepo) ListPartCandidatesByProject(_ context.Context, projectID string) ([]domain.ProjectPartCandidate, error) {
+	if projectID == "" {
+		return append([]domain.ProjectPartCandidate(nil), s.partCandidates...), nil
+	}
+	filtered := make([]domain.ProjectPartCandidate, 0, len(s.partCandidates))
+	for _, candidate := range s.partCandidates {
+		if candidate.ProjectID == projectID {
+			filtered = append(filtered, candidate)
+		}
+	}
+	return filtered, nil
 }
 func (s *stubProjectRepo) SaveSupplierOffer(_ context.Context, o domain.SavedSupplierOffer) (domain.SavedSupplierOffer, error) {
+	if s.savedOffers == nil {
+		s.savedOffers = make(map[string]domain.SavedSupplierOffer)
+	}
+	s.savedOffers[o.ID] = o
 	return o, nil
 }
 func (s *stubProjectRepo) RemoveSavedSupplierOffer(_ context.Context, _ string) error {
 	return nil
 }
-func (s *stubProjectRepo) ListSavedSupplierOffers(_ context.Context, _ string) ([]domain.SavedSupplierOffer, error) {
-	return nil, nil
+func (s *stubProjectRepo) ListSavedSupplierOffers(_ context.Context, requirementID string) ([]domain.SavedSupplierOffer, error) {
+	filtered := make([]domain.SavedSupplierOffer, 0, len(s.savedOffers))
+	for _, offer := range s.savedOffers {
+		if requirementID == "" || offer.RequirementID == requirementID {
+			filtered = append(filtered, offer)
+		}
+	}
+	return filtered, nil
 }
-func (s *stubProjectRepo) ListSavedSupplierOffersByProject(_ context.Context, _ string) ([]domain.SavedSupplierOffer, error) {
-	return nil, nil
+func (s *stubProjectRepo) ListSavedSupplierOffersByProject(_ context.Context, projectID string) ([]domain.SavedSupplierOffer, error) {
+	filtered := make([]domain.SavedSupplierOffer, 0, len(s.savedOffers))
+	for _, offer := range s.savedOffers {
+		if projectID == "" || offer.ProjectID == projectID {
+			filtered = append(filtered, offer)
+		}
+	}
+	return filtered, nil
 }
-func (s *stubProjectRepo) LinkSupplierOfferToComponent(_ context.Context, _, _ string) error {
+func (s *stubProjectRepo) LinkSupplierOfferToComponent(_ context.Context, offerID, componentID string) error {
+	s.linkedOfferID = offerID
+	s.linkedComponentID = componentID
+	if offer, ok := s.savedOffers[offerID]; ok {
+		offer.LinkedComponentID = &componentID
+		s.savedOffers[offerID] = offer
+	}
 	return nil
 }
 func (s *stubProjectRepo) GetSavedSupplierOffer(_ context.Context, id string) (domain.SavedSupplierOffer, error) {
+	if offer, ok := s.savedOffers[id]; ok {
+		return offer, nil
+	}
 	return domain.SavedSupplierOffer{ID: id}, nil
 }
-func (s *stubProjectRepo) UpdatePartCandidateComponent(_ context.Context, _ string, _ string, _ domain.CandidateOrigin) error {
+func (s *stubProjectRepo) UpdatePartCandidateComponent(_ context.Context, candidateID string, componentID string, origin domain.CandidateOrigin) error {
+	s.updatedCandidateID = candidateID
+	s.updatedCandidateComponent = componentID
+	s.updatedCandidateOrigin = origin
+	for i := range s.partCandidates {
+		if s.partCandidates[i].ID != candidateID {
+			continue
+		}
+		s.partCandidates[i].ComponentID = &componentID
+		s.partCandidates[i].Origin = origin
+		break
+	}
 	return nil
 }
 

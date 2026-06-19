@@ -1,6 +1,11 @@
 package phoneintake
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+)
+
+var mouserCompactPattern = regexp.MustCompile(`^21P(.+)Q(\d+)$`)
 
 func parseLcscBarcode(raw string) (partID, qty string) {
 	s := strings.TrimSpace(raw)
@@ -23,11 +28,17 @@ func parseLcscBarcode(raw string) (partID, qty string) {
 	return
 }
 
-func parseMouserBarcode(raw string) (partNumber, qty string) {
+func parseMouserBarcode(raw string) (partNumber, qty, manufacturer string) {
 	payload := raw
 	if strings.HasPrefix(payload, "[)>") {
 		if idx := strings.Index(payload, "06"); idx >= 0 {
 			payload = payload[idx+2:]
+		}
+	}
+
+	if !strings.ContainsAny(payload, "\x1d\x1e") {
+		if match := mouserCompactPattern.FindStringSubmatch(payload); len(match) == 3 {
+			return match[1], match[2], ""
 		}
 	}
 
@@ -52,6 +63,8 @@ func parseMouserBarcode(raw string) (partNumber, qty string) {
 			partNumber = seg[2:]
 		case strings.HasPrefix(seg, "Q") && qty == "":
 			qty = seg[1:]
+		case strings.HasPrefix(seg, "1V") && manufacturer == "":
+			manufacturer = seg[2:]
 		}
 	}
 	return

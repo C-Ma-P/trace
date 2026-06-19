@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,8 +13,8 @@ import (
 	"time"
 
 	"github.com/C-Ma-P/trace/internal/domain"
-	"github.com/C-Ma-P/trace/internal/ingest"
 	"github.com/C-Ma-P/trace/internal/paths"
+	"github.com/C-Ma-P/trace/internal/service"
 	"github.com/C-Ma-P/trace/internal/sourcing"
 )
 
@@ -308,27 +306,7 @@ func (a *App) ProbeSupplierOffer(offer SupplierOfferResponse) (SupplierOfferResp
 	if err := a.checkReady(); err != nil {
 		return SupplierOfferResponse{}, err
 	}
-	probed, err := a.svc.ProbeSupplierOffer(context.Background(), sourcing.SupplierOffer{
-		Provider:           offer.Provider,
-		Manufacturer:       offer.Manufacturer,
-		MPN:                offer.MPN,
-		SupplierPartNumber: offer.SupplierPartNumber,
-		Description:        offer.Description,
-		Package:            offer.Package,
-		Stock:              offer.Stock,
-		MOQ:                offer.MOQ,
-		UnitPrice:          offer.UnitPrice,
-		ProductURL:         offer.ProductURL,
-		DatasheetURL:       offer.DatasheetURL,
-		ImageURL:           offer.ImageURL,
-		Lifecycle:          offer.Lifecycle,
-		HasSymbol:          offer.HasSymbol,
-		HasFootprint:       offer.HasFootprint,
-		HasDatasheet:       offer.HasDatasheet,
-		MatchScore:         offer.MatchScore,
-		MatchReasons:       offer.MatchReasons,
-		Raw:                offer.Raw,
-	})
+	probed, err := a.svc.ProbeSupplierOffer(context.Background(), supplierOfferFromResponse(offer))
 	response := supplierOfferToResponse(probed)
 	if err != nil {
 		return response, err
@@ -548,6 +526,56 @@ func supplierOfferToResponse(offer sourcing.SupplierOffer) SupplierOfferResponse
 	}
 }
 
+func supplierOfferFromResponse(offer SupplierOfferResponse) sourcing.SupplierOffer {
+	return sourcing.SupplierOffer{
+		Provider:           offer.Provider,
+		Manufacturer:       offer.Manufacturer,
+		MPN:                offer.MPN,
+		SupplierPartNumber: offer.SupplierPartNumber,
+		Description:        offer.Description,
+		Package:            offer.Package,
+		Stock:              offer.Stock,
+		MOQ:                offer.MOQ,
+		UnitPrice:          offer.UnitPrice,
+		ProductURL:         offer.ProductURL,
+		DatasheetURL:       offer.DatasheetURL,
+		ImageURL:           offer.ImageURL,
+		Lifecycle:          offer.Lifecycle,
+		HasSymbol:          offer.HasSymbol,
+		HasFootprint:       offer.HasFootprint,
+		HasDatasheet:       offer.HasDatasheet,
+		AssetProbeState:    sourcing.AssetProbeState(offer.AssetProbeState),
+		AssetProbeError:    offer.AssetProbeError,
+		MatchScore:         offer.MatchScore,
+		MatchReasons:       offer.MatchReasons,
+		Raw:                offer.Raw,
+	}
+}
+
+func supplierOfferFromSnapshot(provider, manufacturer, mpn, supplierPartNumber, description, packageName string, stock, moq *int, unitPrice *float64, productURL, datasheetURL, imageURL, lifecycle string, hasSymbol, hasFootprint, hasDatasheet bool, raw map[string]string, assetProbeState, assetProbeError string) sourcing.SupplierOffer {
+	return sourcing.SupplierOffer{
+		Provider:           provider,
+		Manufacturer:       manufacturer,
+		MPN:                mpn,
+		SupplierPartNumber: supplierPartNumber,
+		Description:        description,
+		Package:            packageName,
+		Stock:              stock,
+		MOQ:                moq,
+		UnitPrice:          unitPrice,
+		ProductURL:         productURL,
+		DatasheetURL:       datasheetURL,
+		ImageURL:           imageURL,
+		Lifecycle:          lifecycle,
+		HasSymbol:          hasSymbol,
+		HasFootprint:       hasFootprint,
+		HasDatasheet:       hasDatasheet,
+		AssetProbeState:    sourcing.AssetProbeState(assetProbeState),
+		AssetProbeError:    assetProbeError,
+		Raw:                raw,
+	}
+}
+
 func sourceResultToResponse(result sourcing.SourceResult) SourceRequirementResponse {
 	offers := make([]SupplierOfferResponse, len(result.Offers))
 	for i, offer := range result.Offers {
@@ -618,27 +646,13 @@ func (a *App) SaveSupplierOffer(input SaveSupplierOfferInput) (SavedSupplierOffe
 	if err := a.checkReady(); err != nil {
 		return SavedSupplierOfferResponse{}, err
 	}
-	offer := domain.SavedSupplierOffer{
-		Provider:        input.Provider,
-		ProviderPartID:  input.ProviderPartID,
-		ProductURL:      input.ProductURL,
-		ImageURL:        input.ImageURL,
-		DatasheetURL:    input.DatasheetURL,
-		HasSymbol:       input.HasSymbol,
-		HasFootprint:    input.HasFootprint,
-		HasDatasheet:    input.HasDatasheet,
-		Manufacturer:    input.Manufacturer,
-		MPN:             input.MPN,
-		Description:     input.Description,
-		Package:         input.Package,
-		Stock:           input.Stock,
-		MOQ:             input.MOQ,
-		UnitPrice:       input.UnitPrice,
-		Currency:        input.Currency,
-		AssetProbeState: input.AssetProbeState,
-		AssetProbeError: input.AssetProbeError,
-		CapturedAt:      time.Now().UTC(),
-	}
+	offer := service.SavedSupplierOfferFromSupplierOffer(supplierOfferFromSnapshot(
+		input.Provider, input.Manufacturer, input.MPN, input.ProviderPartID, input.Description, input.Package,
+		input.Stock, input.MOQ, input.UnitPrice, input.ProductURL, input.DatasheetURL, input.ImageURL, input.Lifecycle,
+		input.HasSymbol, input.HasFootprint, input.HasDatasheet, input.Raw, input.AssetProbeState, input.AssetProbeError,
+	))
+	offer.Currency = input.Currency
+	offer.CapturedAt = time.Now().UTC()
 	saved, err := a.svc.SaveSupplierOfferForRequirement(context.Background(), input.RequirementID, offer)
 	if err != nil {
 		return SavedSupplierOfferResponse{}, err
@@ -650,27 +664,13 @@ func (a *App) ImportSupplierOffer(input ImportSupplierOfferInput) (ImportSupplie
 	if err := a.checkReady(); err != nil {
 		return ImportSupplierOfferResponse{}, err
 	}
-	offer := domain.SavedSupplierOffer{
-		Provider:        input.Provider,
-		ProviderPartID:  input.ProviderPartID,
-		ProductURL:      input.ProductURL,
-		ImageURL:        input.ImageURL,
-		DatasheetURL:    input.DatasheetURL,
-		HasSymbol:       input.HasSymbol,
-		HasFootprint:    input.HasFootprint,
-		HasDatasheet:    input.HasDatasheet,
-		Manufacturer:    input.Manufacturer,
-		MPN:             input.MPN,
-		Description:     input.Description,
-		Package:         input.Package,
-		Stock:           input.Stock,
-		MOQ:             input.MOQ,
-		UnitPrice:       input.UnitPrice,
-		Currency:        input.Currency,
-		AssetProbeState: input.AssetProbeState,
-		AssetProbeError: input.AssetProbeError,
-		CapturedAt:      time.Now().UTC(),
-	}
+	offer := service.SavedSupplierOfferFromSupplierOffer(supplierOfferFromSnapshot(
+		input.Provider, input.Manufacturer, input.MPN, input.ProviderPartID, input.Description, input.Package,
+		input.Stock, input.MOQ, input.UnitPrice, input.ProductURL, input.DatasheetURL, input.ImageURL, input.Lifecycle,
+		input.HasSymbol, input.HasFootprint, input.HasDatasheet, input.Raw, input.AssetProbeState, input.AssetProbeError,
+	))
+	offer.Currency = input.Currency
+	offer.CapturedAt = time.Now().UTC()
 	candidate, savedOffer, err := a.svc.ImportSupplierOffer(context.Background(), input.RequirementID, offer, input.SetPreferred)
 	if err != nil {
 		return ImportSupplierOfferResponse{}, err
@@ -692,27 +692,13 @@ func (a *App) AddProviderCandidate(input AddProviderCandidateInput) (PartCandida
 	if err := a.checkReady(); err != nil {
 		return PartCandidateResponse{}, err
 	}
-	offer := domain.SavedSupplierOffer{
-		Provider:        input.Provider,
-		ProviderPartID:  input.ProviderPartID,
-		ProductURL:      input.ProductURL,
-		ImageURL:        input.ImageURL,
-		DatasheetURL:    input.DatasheetURL,
-		HasSymbol:       input.HasSymbol,
-		HasFootprint:    input.HasFootprint,
-		HasDatasheet:    input.HasDatasheet,
-		Manufacturer:    input.Manufacturer,
-		MPN:             input.MPN,
-		Description:     input.Description,
-		Package:         input.Package,
-		Stock:           input.Stock,
-		MOQ:             input.MOQ,
-		UnitPrice:       input.UnitPrice,
-		Currency:        input.Currency,
-		AssetProbeState: input.AssetProbeState,
-		AssetProbeError: input.AssetProbeError,
-		CapturedAt:      time.Now().UTC(),
-	}
+	offer := service.SavedSupplierOfferFromSupplierOffer(supplierOfferFromSnapshot(
+		input.Provider, input.Manufacturer, input.MPN, input.ProviderPartID, input.Description, input.Package,
+		input.Stock, input.MOQ, input.UnitPrice, input.ProductURL, input.DatasheetURL, input.ImageURL, input.Lifecycle,
+		input.HasSymbol, input.HasFootprint, input.HasDatasheet, input.Raw, input.AssetProbeState, input.AssetProbeError,
+	))
+	offer.Currency = input.Currency
+	offer.CapturedAt = time.Now().UTC()
 	candidate, err := a.svc.AddProviderCandidate(context.Background(), input.RequirementID, offer, input.SetPreferred)
 	if err != nil {
 		return PartCandidateResponse{}, err
@@ -729,69 +715,7 @@ func (a *App) ImportProviderCandidate(candidateID string) (PartCandidateResponse
 		return PartCandidateResponse{}, err
 	}
 
-	if candidate.SourceOffer != nil {
-		if candidate.SourceOffer.Provider == sourcing.ProviderLCSC && candidate.SourceOffer.ProviderPartID != "" && candidate.ComponentID != nil {
-			_, _ = a.ImportEasyEDAAssets(ImportEasyEDAInput{
-				ComponentID: *candidate.ComponentID,
-				LCSCID:      candidate.SourceOffer.ProviderPartID,
-			})
-		}
-		if candidate.ComponentID != nil {
-			_, _ = a.importProviderDatasheet(context.Background(), *candidate.ComponentID, candidate.SourceOffer)
-		}
-	}
-
 	return partCandidateToResponse(candidate), nil
-}
-
-func (a *App) importProviderDatasheet(ctx context.Context, componentID string, offer *domain.SavedSupplierOffer) (bool, error) {
-	if a.ingest == nil || offer == nil {
-		return false, nil
-	}
-	url := strings.TrimSpace(offer.DatasheetURL)
-	if url == "" {
-		return false, nil
-	}
-
-	resp, err := http.Get(url)
-	if err != nil {
-		return false, nil
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return false, nil
-	}
-	contentType := strings.ToLower(strings.TrimSpace(resp.Header.Get("Content-Type")))
-	if contentType != "" && !strings.Contains(contentType, "pdf") {
-		return false, nil
-	}
-
-	tempFile, err := os.CreateTemp("", "trace-datasheet-*.pdf")
-	if err != nil {
-		return false, nil
-	}
-	defer func() {
-		_ = tempFile.Close()
-		_ = os.Remove(tempFile.Name())
-	}()
-
-	if _, err := io.Copy(tempFile, resp.Body); err != nil {
-		return false, nil
-	}
-	if err := tempFile.Close(); err != nil {
-		return false, nil
-	}
-
-	_, err = a.ingest.Ingest(ctx, ingest.IngestRequest{
-		ComponentID: componentID,
-		FilePath:    tempFile.Name(),
-		SourceKind:  offer.Provider,
-		SourceLabel: url,
-	})
-	if err != nil {
-		return false, nil
-	}
-	return true, nil
 }
 
 func partCandidateToResponse(c domain.ProjectPartCandidate) PartCandidateResponse {
@@ -845,6 +769,8 @@ func savedOfferToResponse(o domain.SavedSupplierOffer) SavedSupplierOfferRespons
 		MOQ:               o.MOQ,
 		UnitPrice:         o.UnitPrice,
 		Currency:          o.Currency,
+		Lifecycle:         o.Lifecycle,
+		Raw:               o.Raw,
 		AssetProbeState:   o.AssetProbeState,
 		AssetProbeError:   o.AssetProbeError,
 		ProbeCompletedAt:  probeCompletedAt,

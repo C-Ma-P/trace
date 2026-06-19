@@ -113,7 +113,7 @@ func (c *Coordinator) Source(ctx context.Context, query RequirementQuery) Source
 		return SourceResult{Providers: []ProviderStatus{{Provider: "", Status: "error", Error: err.Error()}}}
 	}
 	result := value.(SourceResult)
-	c.reporter.Emit(activity.NewSourcingEvent(activity.SeveritySuccess, "request-completed", "Sourcing request completed", mergeMetadata(metadata, map[string]any{"offers": len(result.Offers)})))
+	c.reporter.Emit(activity.NewSourcingEvent(activity.SeveritySuccess, "request-completed", "Sourcing request completed", mergeMetadata(metadata, map[string]any{"offers": len(result.Offers), "result": result})))
 	return result
 }
 
@@ -161,15 +161,22 @@ func (c *Coordinator) SourceFromProvider(ctx context.Context, query RequirementQ
 		return SourceResult{Providers: []ProviderStatus{{Provider: providerName, Status: "error", Error: err.Error()}}}
 	}
 	result := value.(SourceResult)
-	c.reporter.Emit(activity.NewSourcingEvent(activity.SeveritySuccess, "provider-offers", "Provider returned offers", mergeMetadata(metadata, map[string]any{"offers": len(result.Offers)})))
+	c.reporter.Emit(activity.NewSourcingEvent(activity.SeveritySuccess, "provider-offers", "Provider returned offers", mergeMetadata(metadata, map[string]any{"offers": len(result.Offers), "result": result})))
 	return result
 }
 
 func (c *Coordinator) LookupByVendorPartID(ctx context.Context, vendor, partID string) (SupplierOffer, error) {
+	return c.LookupByVendorPartIDWithManufacturer(ctx, vendor, partID, "")
+}
+
+func (c *Coordinator) LookupByVendorPartIDWithManufacturer(ctx context.Context, vendor, partID, manufacturer string) (SupplierOffer, error) {
 	metadata := map[string]any{"vendor": vendor, "partId": partID}
+	if strings.TrimSpace(manufacturer) != "" {
+		metadata["manufacturer"] = manufacturer
+	}
 	c.reporter.Emit(activity.NewSourcingEvent(activity.SeverityInfo, "lookup-started", "Vendor lookup started", metadata))
 
-	key := LookupVendorPartIDCacheKey(vendor, partID, c.configFingerprint)
+	key := LookupVendorPartIDCacheKey(vendor, partID, manufacturer, c.configFingerprint)
 	if offer, ok := c.lookupCache.Get(key); ok {
 		c.reporter.Sourcing(activity.Sourcing{
 			Severity: activity.SeverityInfo,
@@ -187,7 +194,7 @@ func (c *Coordinator) LookupByVendorPartID(ctx context.Context, vendor, partID s
 	})
 
 	value, err, shared := c.group.Do("lookup:"+key, func() (any, error) {
-		offer, lookupErr := c.service.LookupByVendorPartID(ctx, vendor, partID)
+		offer, lookupErr := c.service.LookupByVendorPartIDWithManufacturer(ctx, vendor, partID, manufacturer)
 		if lookupErr != nil {
 			return SupplierOffer{}, lookupErr
 		}
@@ -207,7 +214,7 @@ func (c *Coordinator) LookupByVendorPartID(ctx context.Context, vendor, partID s
 		return SupplierOffer{}, err
 	}
 	result := value.(SupplierOffer)
-	c.reporter.Emit(activity.NewSourcingEvent(activity.SeveritySuccess, "lookup-completed", "Vendor lookup completed", mergeMetadata(metadata, map[string]any{"mpn": result.MPN, "provider": result.Provider})))
+	c.reporter.Emit(activity.NewSourcingEvent(activity.SeveritySuccess, "lookup-completed", "Vendor lookup completed", mergeMetadata(metadata, map[string]any{"mpn": result.MPN, "provider": result.Provider, "offer": result})))
 	return result, nil
 }
 
@@ -316,8 +323,8 @@ func BuildRequirementProviderCacheKey(query RequirementQuery, providerName, conf
 	return combineFingerprint(configFingerprint, fmt.Sprintf("provider:%s|%s", provider, buildQueryFingerprint(query)))
 }
 
-func LookupVendorPartIDCacheKey(vendor, partID, configFingerprint string) string {
-	return combineFingerprint(configFingerprint, fmt.Sprintf("lookup:%s|%s", normalizeText(vendor), normalizePart(partID)))
+func LookupVendorPartIDCacheKey(vendor, partID, manufacturer, configFingerprint string) string {
+	return combineFingerprint(configFingerprint, fmt.Sprintf("lookup:%s|%s|%s", normalizeText(vendor), normalizePart(partID), normalizeText(manufacturer)))
 }
 
 func combineFingerprint(fingerprint, body string) string {

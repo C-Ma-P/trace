@@ -212,12 +212,37 @@ export interface SavedSupplierOffer {
   moq: number | null;
   unitPrice: number | null;
   currency: string;
+  lifecycle: string;
+  raw?: Record<string, string> | null;
   assetProbeState?: string;
   assetProbeError?: string;
   probeCompletedAt?: string;
   linkedComponentId: string | null;
   capturedAt: string;
   createdAt: string;
+}
+
+export interface SupplierOfferSnapshotInput {
+  provider: string;
+  providerPartId: string;
+  productUrl: string;
+  imageUrl: string;
+  datasheetUrl: string;
+  hasSymbol: boolean;
+  hasFootprint: boolean;
+  hasDatasheet: boolean;
+  manufacturer: string;
+  mpn: string;
+  description: string;
+  package: string;
+  stock: number | null;
+  moq: number | null;
+  unitPrice: number | null;
+  currency: string;
+  lifecycle: string;
+  raw?: Record<string, string> | null;
+  assetProbeState?: string;
+  assetProbeError?: string;
 }
 
 export interface ImportSupplierOfferResult {
@@ -710,49 +735,11 @@ export function demotePreferredCandidate(
   return call('DemotePreferredCandidate', requirementId, candidateId);
 }
 
-export function saveSupplierOffer(input: {
-  requirementId: string;
-  provider: string;
-  providerPartId: string;
-  productUrl: string;
-  imageUrl: string;
-  datasheetUrl: string;
-  manufacturer: string;
-  mpn: string;
-  description: string;
-  package: string;
-  stock: number | null;
-  moq: number | null;
-  unitPrice: number | null;
-  currency: string;
-  assetProbeState?: string;
-  assetProbeError?: string;
-}): Promise<SavedSupplierOffer> {
+export function saveSupplierOffer(input: { requirementId: string } & SupplierOfferSnapshotInput): Promise<SavedSupplierOffer> {
   return call('SaveSupplierOffer', input);
 }
 
-export function importSupplierOffer(input: {
-  requirementId: string;
-  provider: string;
-  providerPartId: string;
-  productUrl: string;
-  imageUrl: string;
-  datasheetUrl: string;
-  hasSymbol: boolean;
-  hasFootprint: boolean;
-  hasDatasheet: boolean;
-  manufacturer: string;
-  mpn: string;
-  description: string;
-  package: string;
-  stock: number | null;
-  moq: number | null;
-  unitPrice: number | null;
-  currency: string;
-  assetProbeState?: string;
-  assetProbeError?: string;
-  setPreferred: boolean;
-}): Promise<ImportSupplierOfferResult> {
+export function importSupplierOffer(input: { requirementId: string; setPreferred: boolean } & SupplierOfferSnapshotInput): Promise<ImportSupplierOfferResult> {
   return call('ImportSupplierOffer', input);
 }
 
@@ -760,25 +747,7 @@ export function removeSavedSupplierOffer(offerId: string): Promise<void> {
   return call('RemoveSavedSupplierOffer', offerId);
 }
 
-export function addProviderCandidate(input: {
-  requirementId: string;
-  provider: string;
-  providerPartId: string;
-  productUrl: string;
-  imageUrl: string;
-  datasheetUrl: string;
-  manufacturer: string;
-  mpn: string;
-  description: string;
-  package: string;
-  stock: number | null;
-  moq: number | null;
-  unitPrice: number | null;
-  currency: string;
-  assetProbeState?: string;
-  assetProbeError?: string;
-  setPreferred: boolean;
-}): Promise<PartCandidate> {
+export function addProviderCandidate(input: { requirementId: string; setPreferred: boolean } & SupplierOfferSnapshotInput): Promise<PartCandidate> {
   return call('AddProviderCandidate', input);
 }
 
@@ -792,6 +761,10 @@ export function getComponentDetail(id: string): Promise<ComponentDetail> {
 
 export function listComponentAssets(componentId: string): Promise<ComponentAsset[]> {
   return call('ListComponentAssets', componentId);
+}
+
+export function getComponentAsset(assetId: string): Promise<ComponentAsset> {
+  return call('GetComponentAsset', assetId);
 }
 
 export function createComponentAsset(input: {

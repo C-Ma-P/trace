@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ComponentAsset } from '../backend';
+  import DatasheetPreview from './DatasheetPreview.svelte';
   import ModelPreview from './ModelPreview.svelte';
 
   let {
@@ -35,30 +36,16 @@
   let activeSlot = $derived(slots.find((s) => s.key === activeType) ?? slots[0]);
   let show3dViewer = $derived(activeSlot.key === '3d_model' && activeSlot.asset != null);
   let showDatasheet = $derived(activeSlot.key === 'datasheet');
+  let showDatasheetViewer = $derived(showDatasheet && activeSlot.asset != null);
 </script>
 
 <div class="preview-panel">
-  <div class="preview-main" class:preview-3d={show3dViewer}>
+  <div class="preview-main" class:preview-3d={show3dViewer} class:preview-datasheet={showDatasheet}>
     {#if show3dViewer}
       <ModelPreview asset={activeSlot.asset!} />
     {:else if showDatasheet}
-      <!-- Datasheet: show info card or empty state -->
-      {#if activeSlot.asset}
-        <div class="preview-fallback">
-          <div class="fallback-icon">📄</div>
-          <div class="fallback-label">{activeSlot.asset.label || 'Datasheet'}</div>
-          <div class="fallback-meta">
-            {#if activeSlot.asset.source}
-              <span class="meta-tag">{activeSlot.asset.source}</span>
-            {/if}
-          </div>
-          {#if activeSlot.asset.urlOrPath}
-            <div class="fallback-path" title={activeSlot.asset.urlOrPath}>
-              {activeSlot.asset.urlOrPath}
-            </div>
-          {/if}
-          <div class="fallback-note">Datasheet viewer coming soon</div>
-        </div>
+      {#if showDatasheetViewer}
+        <DatasheetPreview asset={activeSlot.asset} />
       {:else}
         <div class="preview-empty">
           <div class="empty-icon">📄</div>
@@ -135,6 +122,13 @@
   .preview-main.preview-3d {
     padding: 0;
     height: 280px;
+  }
+  .preview-main.preview-datasheet {
+    padding: 0;
+    align-items: stretch;
+    justify-content: stretch;
+    height: 420px;
+    max-height: 420px;
   }
   .preview-image {
     max-width: 100%;

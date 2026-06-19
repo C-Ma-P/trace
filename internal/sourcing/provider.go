@@ -8,3 +8,11 @@ type Provider interface {
 	Search(ctx context.Context, query RequirementQuery) ([]SupplierOffer, error)
 	FriendlyError(err error) string
 }
+
+type ManufacturerPartLookupProvider interface {
+	LookupByPartNumberAndManufacturer(ctx context.Context, partNumber, manufacturer string) (SupplierOffer, error)
+}
+
+type VendorPartLookupProvider interface {
+	LookupByVendorPartID(ctx context.Context, vendor, partID string) (SupplierOffer, error)
+}

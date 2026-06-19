@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -365,6 +367,83 @@ func (c *Controller) OpenProjectWindow(projectID string, hideLauncher bool) erro
 	return nil
 }
 
+func (c *Controller) OpenDatasheetWindow(assetID string) error {
+	assetID = strings.TrimSpace(assetID)
+	if assetID == "" {
+		return fmt.Errorf("asset id required")
+	}
+	if c.backend == nil {
+		return fmt.Errorf("backend not available")
+	}
+
+	asset, err := c.backend.GetComponentAsset(assetID)
+	if err != nil {
+		return fmt.Errorf("load asset: %w", err)
+	}
+	if asset.AssetType != "datasheet" {
+		return fmt.Errorf("asset %q is not a datasheet", assetID)
+	}
+
+	name := "datasheet-" + asset.ID
+	url := c.withStartupStatus(c.datasheetURL(asset.ID))
+
+	if existing, ok := c.app.Window.GetByName(name); ok {
+		existing.SetURL(url)
+		existing.Show()
+		existing.Focus()
+		return nil
+	}
+
+	title := strings.TrimSpace(asset.Label)
+	if title == "" {
+		title = filepath.Base(strings.TrimSpace(asset.URLOrPath))
+	}
+	if title == "" {
+		title = asset.ID
+	}
+
+	window := c.app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Name:             name,
+		Title:            "Datasheet — " + title,
+		Width:            1100,
+		Height:           900,
+		MinWidth:         700,
+		MinHeight:        500,
+		BackgroundColour: traceWindowBackground,
+		Hidden:           true,
+		URL:              url,
+		Linux:            application.LinuxWindow{Menu: c.buildBaseFileMenu(false)},
+	})
+	c.showWindowOnRuntimeReady(window, true, nil)
+	return nil
+}
+
+func (c *Controller) OpenAssetExternally(assetID string) error {
+	assetID = strings.TrimSpace(assetID)
+	if assetID == "" {
+		return fmt.Errorf("asset id required")
+	}
+	if c.backend == nil {
+		return fmt.Errorf("backend not available")
+	}
+
+	target, err := c.backend.ResolveComponentAssetOpenTarget(assetID)
+	if err != nil {
+		return err
+	}
+
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", target)
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", target)
+	default:
+		cmd = exec.Command("xdg-open", target)
+	}
+	return cmd.Start()
+}
+
 func (c *Controller) PromptOpenProjectWindow(projectID string) {
 	projectID = strings.TrimSpace(projectID)
 	if projectID == "" {
@@ -541,4 +620,8 @@ func (c *Controller) preferencesURL(projectID string) string {
 		return "/?mode=preferences"
 	}
 	return "/?mode=preferences&projectId=" + url.QueryEscape(projectID)
+}
+
+func (c *Controller) datasheetURL(assetID string) string {
+	return "/?mode=datasheet&assetId=" + url.QueryEscape(assetID)
 }
